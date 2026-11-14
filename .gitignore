@@ -1,0 +1,48 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+config.local.*
+secrets/
+secrets.*
+credentials/
+credentials.*
+.git-credentials
+.netrc
+_netrc
+.npmrc
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+out/
+coverage/
+test-results/
+playwright-report/
+
+# Cache and temporary files
+.cache/
+.tmp/
+tmp/
+temp/
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Editor and OS files
+.idea/
+.vscode/
+.vs/
+*.suo
+.DS_Store
+Thumbs.db
+Desktop.ini
