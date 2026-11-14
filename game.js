@@ -50,7 +50,7 @@
   const blastRange=16.8, loosePartLife=30;
   const woodChipRange = 5.3;
   const startingCartridges = 5, rifleSupply = 12;
-  const supplyDuration = 2.4, supplyRange = 1.6;
+  const practiceSupplyDuration = 2.4, supplyRange = 1.6, supplyFinishLead = .2;
   const supplyRustles = [.23,.49,.78,1.05,1.36,1.61,1.91,2.16];
   const newCartridge = sealed => ({
     cars:Array.from({length:launcher.carCount},(_,i)=>i),belt:0,feed:0,sealed
@@ -93,6 +93,13 @@
       this.medium = {dry,wet,muffler};
       if(Valley.movementAudio || Valley.outdoorStoneAudio || Valley.outdoorWoodAudio || Valley.indoorStoneAudio) {
         this.movementSound=new Valley.MovementSound(context,this.effects,this.random);
+      }
+      if(Valley.supplyAudio) {
+        this.loadingSupplyRecording=true;
+        this.decodeRecordings([Valley.supplyAudio],"supply bag").then(([recording])=>{
+          this.supplyRecording=recording;
+          this.loadingSupplyRecording=false;
+        });
       }
 
       this.blastPeak=context.createWaveShaper();
@@ -493,6 +500,23 @@
       }
     }
 
+    playBagRecording() {
+      const context=this.context, buffer=this.supplyRecording;
+      if(!buffer || context?.state!=="running") return null;
+      const source=context.createBufferSource(), gain=context.createGain();
+      source.buffer=buffer;
+      source.connect(gain).connect(this.effects);
+      const playback={source,gain,start:context.currentTime,duration:buffer.duration};
+      this.bagRecording=playback;
+      source.onended=()=>{
+        if(this.bagRecording===playback) this.bagRecording=null;
+        source.disconnect();
+        gain.disconnect();
+      };
+      source.start(playback.start);
+      return playback;
+    }
+
     rummageBag(opening = false) {
       if (!this.context) return;
       if (!this.bagBus) {
@@ -517,6 +541,13 @@
     }
 
     stopBagRummage() {
+      const recording=this.bagRecording;
+      if(recording) {
+        const now=this.context.currentTime;
+        this.bagRecording=null;
+        recording.gain.gain.setTargetAtTime(0,now,.008);
+        recording.source.stop(now+.04);
+      }
       const bus = this.bagBus;
       if (!bus) return;
       this.bagBus = null;
@@ -1189,7 +1220,7 @@
   let equipped=pistolGear, mounted=equipped.loaded, motor=equipped.motor;
   let cycle = null, queued = null, refill = null, inspection = null, pendingDraw = null, triggerHeld = false;
   let motorPress = 0;
-  let supplyTime = null;
+  let supply = null;
   let doorHold = null, burnerHold = null;
   let practiceRound = null;
   let animationDemo = null;
@@ -1233,33 +1264,44 @@
 
   function stopSupply() {
     audio.stopBagRummage();
-    supplyTime=null;
+    supply=null;
     resupply.hidden=true;
   }
 
   function updateSupply(dt) {
-    if(supplyTime===null) return;
+    if(!supply) return;
     if(death || !nearSupply()) {
       stopSupply();
       return;
     }
-    if(supplyTime===supplyDuration) return;
-    const before=supplyTime;
-    supplyTime=Math.min(supplyDuration,supplyTime+dt);
-    const ratio=supplyTime/supplyDuration, percent=Math.floor(ratio*100);
+    if(supply.time===supply.duration) return;
+    if(supply.duration===null && !audio.loadingSupplyRecording) {
+      const recording=audio.playBagRecording();
+      supply.recording=recording;
+      supply.duration=recording ? Math.max(.01,recording.duration-supplyFinishLead) : practiceSupplyDuration;
+      if(!recording) audio.rummageBag(true);
+    }
+    const {duration,time:before,recording}=supply;
+    if(duration!==null) {
+      const time=recording ? audio.context.currentTime-recording.start : before+dt;
+      supply.time=Math.min(duration,time);
+    }
+    const ratio=duration===null ? 0 : supply.time/duration, percent=Math.floor(ratio*100);
     supplyMeter.style.setProperty("--health-ratio",ratio);
     supplyMeter.setAttribute("aria-valuenow",percent);
     supplyPercent.textContent=`${pad(percent)}%`;
-    if(supplyTime===supplyDuration) {
+    if(supply.time===duration) {
       const long=equipped===rifleGear;
       if(long) rifleGear.reserve+=rifleSupply;
       else if(equipped===spiralGear) spiralGear.spares.push(spiral.newMagazine(),spiral.newMagazine());
       else pocket.push(newCartridge(true),newCartridge(true));
       inventory();
       supplyStatus.textContent=long ? `+${rifleSupply} MINICARS` : "+2 CARTRIDGES";
-      audio.stopBagRummage();
-      audio.stowSupplies();
-    } else if(supplyRustles.some(at=>before<at && supplyTime>=at)) audio.rummageBag();
+      if(!recording) {
+        audio.stopBagRummage();
+        audio.stowSupplies();
+      }
+    } else if(!recording && supplyRustles.some(at=>before<at && supply.time>=at)) audio.rummageBag();
   }
 
   function updateHealth() {
@@ -1648,7 +1690,7 @@
   }
 
   function fixtureTarget(cam) {
-    if(death || knockdown || player.seat || player.swim.active || handToss || inspection || refill || supplyTime!==null || pendingDraw) return null;
+    if(death || knockdown || player.seat || player.swim.active || handToss || inspection || refill || supply || pendingDraw) return null;
     return lodging.target(map.road,cam);
   }
 
@@ -1707,7 +1749,7 @@
 
   function updateInteraction(cam) {
     let text="";
-    if(death || knockdown || handToss || inspection || refill || supplyTime!==null) text="";
+    if(death || knockdown || handToss || inspection || refill || supply) text="";
     else if(nearSupply()) text="HOLD R TO RESUPPLY";
     else if(player.seat) text="E STAND";
     else {
@@ -1729,7 +1771,7 @@
 
   function inspectLauncher() {
     if(inspection || cycle || queued || refill || triggerHeld || pendingDraw || handToss || motor?.switching || motor?.pending
-      || supplyTime!==null || !player.ownsLauncher || player.holstered || stowAmount>.34 || mounted.missing) return;
+      || supply || !player.ownsLauncher || player.holstered || stowAmount>.34 || mounted.missing) return;
     inspection={time:0};
     caption.textContent="";
     stage.dataset.aim="false";
@@ -1778,10 +1820,10 @@
       keys.add(e.code);
       if(pendingDraw || (equipped===rifleGear && refill)) return;
       if(nearSupply()) {
-        supplyTime=0;
+        supply={time:0,duration:practiceRound ? practiceSupplyDuration : null,recording:null};
         supplyStatus.textContent="RESUPPLYING";
         resupply.hidden=false;
-        audio.rummageBag(true);
+        if(practiceRound) audio.rummageBag(true);
         updateSupply(0);
       } else if (!handToss && player.ownsLauncher && !refill && !player.holstered) {
         const canQueue=equipped===rifleGear ? rifleGear.reserve>0 &&
@@ -2663,7 +2705,7 @@
   }
 
   function updateReticle() {
-    reticle.hidden = !playing || aim || aimAmount>.12 || supplyTime!==null || Boolean(death || knockdown || refill || inspection || handToss || pendingDraw)
+    reticle.hidden = !playing || aim || aimAmount>.12 || Boolean(supply || death || knockdown || refill || inspection || handToss || pendingDraw)
       || !player.ownsLauncher || player.holstered || stowAmount>.34;
   }
 
