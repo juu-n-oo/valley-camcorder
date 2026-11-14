@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10140f">
+  <title>Valley Camcorder — Hwayang Valley, 2001</title>
+  <link rel="stylesheet" href="tape-font.css">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="textures.js"></script>
+  <script defer src="camcorder-surfaces.js"></script>
+  <script defer src="render.js"></script>
+  <script defer src="animation.js"></script>
+  <script defer src="character.js"></script>
+  <script defer src="character-gltf.js"></script>
+  <script defer src="character-fixture.js"></script>
+  <script defer src="roadview-layout.js"></script>
+  <script defer src="roadview-signs.js"></script>
+  <script defer src="roadview-interiors.js"></script>
+  <script defer src="roadview-suites.js"></script>
+  <script defer src="roadview-dining.js"></script>
+  <script defer src="roadview-lobby.js"></script>
+  <script defer src="roadview-utilities.js"></script>
+  <script defer src="roadview-fire.js"></script>
+  <script defer src="roadview-buildings.js"></script>
+  <script defer src="practice.js"></script>
+  <script defer src="roadview-vehicles.js"></script>
+  <script defer src="roadview.js"></script>
+  <script defer src="props.js"></script>
+  <script defer src="camp.js"></script>
+  <script defer src="valley.js"></script>
+  <script defer src="launcher.js"></script>
+  <script defer src="rifle.js"></script>
+  <script defer src="spiral.js"></script>
+  <script defer src="first-person.js"></script>
+  <script defer src="blast-audio.js"></script>
+  <script defer src="brittle-audio.js"></script>
+  <script defer src="movement-audio.js"></script>
+  <script defer src="breathing-audio.js"></script>
+  <script defer src="outdoor-stone-audio.js"></script>
+  <script defer src="stone-stair-audio.js"></script>
+  <script defer src="outdoor-wood-audio.js"></script>
+  <script defer src="wood-stair-audio.js"></script>
+  <script defer src="indoor-stone-audio.js"></script>
+  <script defer src="dirt-leaf-audio.js"></script>
+  <script defer src="grass-audio.js"></script>
+  <script defer src="lawn-audio.js"></script>
+  <script defer src="movement-sound.js"></script>
+  <script defer src="game.js"></script>
+</head>
+<body>
+  <main class="stage" id="stage" data-mode="menu" aria-label="Valley Camcorder game">
+    <canvas id="view" aria-label="First-person view of the valley"></canvas>
+    <div class="damage-tint" id="damage-tint" aria-hidden="true"></div>
+    <div class="tape-blue" aria-hidden="true"></div>
+    <div class="glass" aria-hidden="true">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+      <div class="record osd"><span class="record-dot"></span><span id="record-state">STBY</span><span id="counter">00:00:00</span></div>
+      <div class="monitor osd"><span>SP</span><span class="battery"><i></i><i></i><i></i></span></div>
+      <div class="rewind-symbol"><i></i><i></i></div>
+      <div class="datestamp osd"><span>AUG 18 '01</span><span id="date-time">PM  2:41</span></div>
+      <div id="aim-mark" class="aim-mark" hidden>
+        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <defs>
+            <path id="aim-lines" d="M6 18V10h4V6h8m28 0h8v4h4v8m0 28v8h-4v4h-8m-28 0h-8v-4H6v-8
+              M6 32h18m16 0h18M32 6v18m0 16v18M16 28v8m32-8v8M28 16h8m-8 32h8M31 32h2"/>
+          </defs>
+          <use href="#aim-lines" stroke="#11111e" stroke-width="4"/>
+          <use href="#aim-lines" stroke="currentColor" stroke-width="1.6"/>
+        </svg>
+      </div>
+    </div>
+
+    <section class="menu" id="menu" aria-labelledby="title">
+      <div class="menu-content">
+        <p class="eyebrow osd">FIELD TAPE 01</p>
+        <h1 id="title" class="osd">VALLEY<br>CAMCORDER</h1>
+        <p class="intro osd">Hwayang Valley, August 18, 2001</p>
+        <div class="play-actions">
+          <button id="play" class="osd" type="button" disabled><span class="play-icon" aria-hidden="true"></span><span id="play-label">LOADING TAPE</span></button>
+          <button id="play-windowed" class="osd" type="button" aria-label="Play in windowed mode" disabled>WINDOWED</button>
+        </div>
+        <p class="menu-note osd" id="menu-note" role="status"></p>
+        <dl class="controls osd">
+          <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Move</dd></div>
+          <div><dt><kbd>Shift</kbd></dt><dd>Run</dd></div>
+          <div><dt><kbd>Space</kbd></dt><dd>Jump</dd></div>
+          <div><dt><kbd>Ctrl</kbd></dt><dd>Crouch</dd></div>
+          <div><dt><kbd>Z</kbd></dt><dd>Prone / Dive</dd></div>
+          <div><dt><kbd>C</kbd></dt><dd>Inspect</dd></div>
+          <div><dt>Mouse</dt><dd>Look</dd></div>
+          <div><dt>LMB</dt><dd>Fire</dd></div>
+          <div><dt>RMB</dt><dd>Aim</dd></div>
+          <div><dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>Rifle / Pistol / SMG</dd></div>
+          <div><dt><kbd>R</kbd></dt><dd>Reload / Resupply</dd></div>
+          <div><dt><kbd>M</kbd></dt><dd>Pistol motor</dd></div>
+          <div><dt><kbd>H</kbd></dt><dd>Pick up / Set down</dd></div>
+          <div><dt><kbd>E</kbd></dt><dd>Interact / Sit</dd></div>
+          <div><dt><kbd>T</kbd></dt><dd>Throw</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd>Target range / Valley</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <div class="play-hud">
+      <div class="resupply osd" id="resupply" hidden>
+        <div class="status-row"><span id="resupply-status">RESUPPLYING</span><b id="resupply-percent">00%</b></div>
+        <div id="resupply-meter" class="health-meter" role="progressbar" aria-label="Resupply progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="health-fill"></div>
+        </div>
+      </div>
+      <div class="status-stack">
+        <div id="breath" class="breath osd" hidden>
+          <div class="status-row"><span>BREATH</span><b id="breath-value">20 / 20</b></div>
+          <div id="breath-meter" class="health-meter" role="meter" aria-label="Breath remaining" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20">
+            <div class="health-fill"></div>
+          </div>
+        </div>
+        <div class="health osd">
+          <div class="status-row"><span>HP</span><b id="health-value">100 / 100</b></div>
+          <div id="health-meter" class="health-meter" role="meter" aria-label="Health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
+            <div class="health-fill"></div>
+          </div>
+        </div>
+        <div class="inventory osd">
+          <div class="status-row"><span id="launcher-name">2 PISTOL</span><b id="count">05 / 05</b></div>
+          <div id="cars" class="car-slots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i hidden></i></div>
+          <div class="inventory-detail">
+            <div class="status-row"><span>TOTAL</span><b id="cars-total">25</b></div>
+            <div class="status-row"><span id="stock-label">CARTS LEFT</span><b id="cartridge-count">05</b></div>
+            <div class="status-row"><span><kbd>M</kbd> MOTOR</span><b id="motor-status" data-powered="true">ON</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="location osd" id="location">SANDBAR</div>
+      <span class="pause-hint osd"><kbd>ESC</kbd> PAUSE</span>
+      <span class="practice-hint osd"><kbd>F</kbd> <span id="practice-hint">TARGET RANGE</span></span>
+      <section class="practice-hud osd" id="practice-hud" aria-label="Minicar target range" hidden>
+        <span id="practice-title">TARGET RANGE</span>
+        <span class="status-row"><b id="practice-score">00 / 08</b><b id="practice-time">00:00</b></span>
+      </section>
+      <div id="interaction" class="interaction osd" hidden></div>
+    </div>
+    <div id="caption" class="caption osd" role="status"></div>
+  </main>
+</body>
+</html>
