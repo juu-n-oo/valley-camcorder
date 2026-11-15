@@ -41,6 +41,10 @@
     const block=(mat,x,y,z,w,h,d,color,opts={})=>box(mat,x,y,z,w,h,d,color,{...hard,...opts});
 
     function platform() {
+      if(guesthouse) {
+        box(m.rock,0,-.309,0,w+.24,.252,d+.25,granite,{radius:.024,kind:"rock",stepBank:"indoorStone"});
+        return;
+      }
       if(style==="temple") {
         const stone=1.48;
         box(m.rock,0,-stone*.5-.07,0,w+.79,stone-.14,d+.86,granite,{radius:.033,kind:"wall"});
@@ -50,7 +54,7 @@
             times(granite,.82+rng()*.26),{radius:.036});
         }
       } else box(m.rock,0,-.24,0,w+.24,.39,d+.25,granite,{radius:.036});
-      const wooden=floorMaterial===m.wood, floorKind=wooden || guesthouse ? "wood" : "rock";
+      const wooden=floorMaterial===m.wood, floorKind=wooden ? "wood" : "rock";
       box(floorMaterial,0,-.074,0,w,.148,d,wooden ? rgb(0xae9274) : rgb(0x9c9a8c),
         {kind:floorKind,hit:wooden ? "wood" : "rock",stepBank:floorKind==="wood" ? "indoorWood" : "indoorStone"});
       if(floorMaterial===m.wood) {
@@ -366,7 +370,7 @@
     }
 
     function lodging() {
-      const suites=Valley.roadSuites, half=w/2;
+      const suites=Valley.roadSuites, utilities=Valley.utilities, half=w/2;
       const wing=half-3.96, shaft=half-2.14, stair=half-1.105, flight=2.76, hall=1.41;
       const last=b.storeys-1, floorTint=rgb(style==="inn" ? 0xbb936c : 0xc6a072);
       const creamWalls=rgb(0xe8dfce), paper=rgb(style==="inn" ? 0xe1e0d4 : 0xe7ddcc);
@@ -377,7 +381,10 @@
       const lo=back+1.28,hi=branch-.90;
       const receptionTint=style==="brick" ? rgb(0xd6b2b4) : creamWalls;
 
-      suites.planks(a,m,-half+.058,half-.058,-front+.062,front-.062,.007,floorTint);
+      utilities.timberFloor(interior,a,[-half,half,-front,front],0,floorTint,{thickness:.148});
+      if(service) {
+        service.fireSurfaces.push({at:a.at([-half+.91,.019,service.z]),kind:"wood",size:.60,normal:[0,1,0],priority:true});
+      }
       wall("x",reception,back,lo,{tint:receptionTint});
       wall("x",reception,hi,branch,{tint:receptionTint});
       wall("z",branch,reception,wing,{tint:receptionTint,
@@ -422,22 +429,29 @@
             guard(target,side*(shaft+.043),from,side*(shaft+.043),to,base,base+storeyHeight);
             guard(target,side*(half-.121),from,side*(half-.121),to,base,base+storeyHeight);
           };
-          if(service && index===0 && side===-1) Valley.utilities.breakableStair(interior,a,service,[x,storeyHeight*.5,0],draw);
-          else draw(a);
+          const structure=utilities.breakableStructure(interior,a,"woodStair",[x,base+storeyHeight*.5,0],draw);
+          if(service && index===0 && side===-1) {
+            const tread=structure.timber[Math.floor(structure.timber.length*.5)];
+            service.fireSurfaces.push({at:[tread.x,tread.top+.019,tread.z],kind:"wood",size:.60,normal:[0,1,0],priority:true});
+          }
         }
       }
 
-      function deck(x0,x1,z0,z1) {
-        const x=(x0+x1)/2,z=(z0+z1)/2,dx=x1-x0,dz=z1-z0;
-        box(m.wood,x,-.079,z,dx,.158,dz,rgb(0xa98a68),{kind:"wood",stepBank:"indoorWood"});
-        box(m.paint,x,-.160,z,dx,.012,dz,rgb(0xe0ddd2));
-        suites.planks(a,m,x0+.002,x1-.002,z0+.002,z1-.002,level+.007,floorTint);
+      function deck(x0,x1,z0,z1,tint=floorTint) {
+        utilities.timberFloor(interior,a,[x0,x1,z0,z1],level,tint,{ceiling:true});
       }
 
       const exterior={surface:facade,tint:wallTint,thickness:.166,baseboard:false};
+      const roomFloor=suites.floorTint(style);
       for(let index=1;index<=last;index++) {
         level=index*storeyHeight;
-        deck(-shaft,shaft,-front,front);
+        deck(-shaft,shaft,-hall,hall);
+        for(const [lo,hi] of [[-front,-hall],[hall,front]]) {
+          deck(-shaft,-wing,lo,hi);
+          deck(-wing,0,lo,hi,roomFloor);
+          deck(0,wing,lo,hi,roomFloor);
+          deck(wing,shaft,lo,hi);
+        }
         for(const side of [-1,1]) {
           const left=side<0 ? -half : shaft,right=side<0 ? -shaft : half;
           deck(left,right,-front,-flight);

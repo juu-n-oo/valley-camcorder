@@ -7,6 +7,12 @@
   const combustible=kind=>kind!=="surface";
   const fraction=n=>n-Math.floor(n);
   const distance=(a,b)=>Math.hypot(a[0]-b[0],(a[1]-b[1])*.75,a[2]-b[2]);
+  const seedAt=([x,y,z])=>fraction(Math.sin(x*36.71+y*57.32+z*17.95)*17335.94);
+
+  function exposedTimber(road,at) {
+    const hit=Valley.roadview.trace(road,plus(at,[0,.072,0]),plus(at,[0,-.067,0]));
+    return hit?.fixture?.timber ? hit.fixture : null;
+  }
 
   function boxSurface(box,at) {
     const [u,v]=Valley.roadview.local(box,at[0],at[2]);
@@ -63,13 +69,13 @@
     function add(at,kind,size,details={}) {
       const range=distance(at,origin);
       if(range>sourceRange || terrain.wetAt(at[0],at[2],at[1]-.025)) return;
-      const key=at.map(value=>Math.round(value/.86)).join(",");
+      const key=details.structure??at.map(value=>Math.round(value/.86)).join(",");
       if(spots.has(key)) return;
-      const seed=fraction(Math.sin(at[0]*36.71+at[1]*57.32+at[2]*17.95)*17335.94);
-      spots.set(key,{...details,at,key,kind,size,seed,range});
+      spots.set(key,{...details,at,key,kind,size,seed:seedAt(at),range});
     }
     for(const {at,kind,size,normal,priority} of site.fireSurfaces) {
-      add(at,kind,size,{blastSurface:true,priority,normal,mark:{at,normal,width:size*.76,height:size*1.24}});
+      const structure=kind==="wood" && normal[1]>.8 ? exposedTimber(road,at) : null;
+      add(at,kind,size,{blastSurface:true,priority,normal,structure,mark:{at,normal,width:size*.76,height:size*1.24}});
     }
     const sideways=[-normal[2],0,normal[0]];
     for(const [out,side,size] of [[.42,-.62,.67],[.88,1.25,.62],[2.25,-1.74,.54],[2.95,1.56,.45]]) {
@@ -99,7 +105,9 @@
     for(const box of Valley.roadview.boxesNear(road,x,z,sourceRange)) {
       const mark=boxSurface(box,origin), kind=box.hit==="wood" ? "wood" : "surface";
       if(kind==="surface" && distance(mark.at,origin)>8.8) continue;
-      add(mark.at,kind,clamp((box.hx+box.hz)*.43,.25,.67),{mark,normal:mark.normal});
+      const structure=box.fixture?.timber ? box.fixture : null;
+      if(structure && exposedTimber(road,mark.at)!==structure) continue;
+      add(mark.at,kind,clamp((box.hx+box.hz)*.43,.25,.67),{mark,normal:mark.normal,structure});
     }
     for(const rock of world.colliders) {
       const {min,max}=rock;
@@ -108,6 +116,15 @@
       if(mark) add(mark.at,"surface",.35,{mark,normal:mark.normal});
     }
     return [...spots.values()].sort((a,b)=>a.range-b.range);
+  }
+
+  function startFire(fires,spot,start) {
+    const {kind,seed,structure}=spot;
+    const lifetime=mix(...durations[kind],seed);
+    const fire={...spot,start,lifetime,tail:combustible(kind) ? 4.1 : 1.7};
+    if(structure) fire.collapseAt=start+(structure.kind==="woodStair" ? mix(8,11,seed) : mix(10,14,seed));
+    fires.push(fire);
+    return fire;
   }
 
   function ignite(world,site,time,fires) {
@@ -120,11 +137,8 @@
     function start(spot,delay) {
       if(count>=remaining || used.has(spot.key)) return null;
       used.add(spot.key);
-      const lifetime=mix(...durations[spot.kind],spot.seed);
-      const fire={...spot,start:time+delay,lifetime,tail:combustible(spot.kind) ? 4.1 : 1.7};
-      fires.push(fire);
       count++;
-      return fire;
+      return startFire(fires,spot,time+delay);
     }
 
     const hard=nearby.filter(spot=>spot.kind==="surface" && spot.range<8.8);
@@ -160,7 +174,40 @@
     }
   }
 
+  function spreadToTimber(world,fires,source,time) {
+    const {road}=world, generation=source.timberSpread??0;
+    if(fires.length>=fireLimit || generation>=2 || source.prop?.picked) return;
+    const origin=source.prop ? point(source.prop.matrix,source.anchor) : source.at;
+    if(Valley.world.wetAt(origin[0],origin[2],origin[1]-.022)) return;
+    const [x,y,z]=origin;
+    const reach=.94+source.size*.62, from=plus(origin,[0,.105,0]);
+    const burning=new Set(fires.map(fire=>fire.structure));
+    let closest=null, nearest=reach;
+    for(const box of Valley.roadview.boxesNear(road,x,z,reach)) {
+      const structure=box.fixture, lift=box.top+.016-y;
+      if(!structure?.timber || burning.has(structure) || lift<-.74 || lift>1.06) continue;
+      const [u,v]=Valley.roadview.local(box,x,z);
+      const a=clamp(u,-box.hx+.028,box.hx-.028), b=clamp(v,-box.hz+.028,box.hz-.028);
+      const gap=Math.hypot(a-u,lift*.95,b-v);
+      if(gap>=nearest) continue;
+      const at=[box.x+box.c*a+box.s*b,box.top+.016,box.z-box.s*a+box.c*b];
+      if(exposedTimber(road,at)!==structure || Valley.world.wetAt(at[0],at[2],at[1]-.022)) continue;
+      if(Valley.roadview.trace(road,from,plus(at,[0,.048,0]))) continue;
+      closest={at,key:structure,structure,kind:"wood",size:clamp((box.hx+box.hz)*.56,.54,.86),seed:seedAt(at),
+        normal:[0,1,0],timberSpread:generation+1};
+      nearest=gap;
+    }
+    if(closest) {
+      startFire(fires,closest,time+.22);
+      source.timberCheckAt=Infinity;
+    }
+  }
+
   function leaveScorch(scene,fire) {
+    if(fire.structure) {
+      fire.structure.charred=true;
+      return;
+    }
     if(fire.prop) {
       fire.prop.charred=true;
       return;
@@ -188,14 +235,26 @@
     scene.scorches.set(fire.key,{at,matrix,mesh:scene.scorchMesh});
   }
 
-  function expire(scene,fires,time) {
+  function update(world,fires,time,collapse) {
     for(let i=fires.length-1;i>=0;i--) {
-      const fire=fires[i];
-      if(!fire.scorched && !fire.prop?.broken && time>=fire.start+.46) {
-        leaveScorch(scene,fire);
+      const fire=fires[i], age=time-fire.start;
+      if(fire.prop?.broken || fire.structure?.broken || age>=fire.lifetime+fire.tail) {
+        fires.splice(i,1);
+        continue;
+      }
+      if(!fire.scorched && age>=(fire.structure ? 2.6 : .46)) {
+        leaveScorch(world.road.interior,fire);
         fire.scorched=true;
       }
-      if(time>=fire.start+fire.lifetime+fire.tail || fire.prop?.broken) fires.splice(i,1);
+      if(age>=fire.lifetime) continue;
+      if(fire.structure && time>=fire.collapseAt) {
+        fire.structure.broken=true;
+        fires.splice(i,1);
+        collapse(fire.structure,fire.at);
+      } else if(time>=(fire.timberCheckAt??fire.start+1.65) && (fire.timberSpread??0)<2) {
+        fire.timberCheckAt=time+1.18;
+        spreadToTimber(world,fires,fire,time);
+      }
     }
   }
 
@@ -273,5 +332,5 @@
     return light;
   }
 
-  Valley.fire={ignite,expire,visuals,scorchVisuals};
+  Valley.fire={ignite,update,visuals,scorchVisuals};
 })();

@@ -185,7 +185,6 @@
     const m=scene.material, palette=palettes[style], paper=rgb(palette.paper), tile=rgb(palette.tile);
     const lo=-width/2,hi=width/2,divider=hi-2.86,bathX=lo+1.95,bathZ=depth-2.33;
     const entry=mix(lo,divider,.62),bedDoor=1.48,bathDoor=bathZ+1.09;
-    planks(a,m,lo+.064,hi-.064,.067,depth-.079,.008,rgb(palette.wood));
     wall(scene,a,height,"z",0,lo,hi,{tint:rgb(0xe7ded1),lining:{surface:m.wallpaper,tint:paper,side:1},
       wainscot:rgb(style==="diner" ? 0xa48566 : 0xb09372),
       door:{center:entry,width:1.36,open:number%2===1,color:rgb(0xb0885d)}});
@@ -235,5 +234,5 @@
       [bathX-.071,1.27,bathDoor-.650],-Math.PI/2,"round");
   }
 
-  Valley.roadSuites={wall,planks,sofa,lowTable,build};
+  Valley.roadSuites={wall,planks,sofa,lowTable,build,floorTint:style=>rgb(palettes[style].wood)};
 })();

@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const { Renderer, clamp, mix, smooth, plus, minus, times, dot, unit, random, transform, multiply, point, direction, camera, waterRipples } = Valley;
+  const { Renderer, Builder, rgb, clamp, mix, smooth, plus, minus, times, dot, unit, random, transform, multiply, point, direction, camera, waterRipples } = Valley;
   const stage = document.querySelector("#stage");
   const canvas = document.querySelector("#view");
   const play = document.querySelector("#play");
@@ -1159,6 +1159,19 @@
       }
       const tail=this.hiss(t+.31,1.75,218,.46,.54,.040,input);
       tail.onended=()=>{input.disconnect();panner.disconnect();};
+    }
+
+    woodCollapse(level,pan) {
+      if(!this.context || level<.02) return;
+      const t=this.context.currentTime, out=this.transientPan(t,pan);
+      for(const [delay,frequency] of [[0,2460],[.039,1880],[.093,3120],[.161,1550]]) {
+        const onset=t+delay+this.random()*.014;
+        this.hiss(onset,.067,frequency,.64*level,.88,.0016,out);
+        this.decayTone(onset,.127,342-delay*550,153,.26*level,out);
+      }
+      this.decayTone(t+.143,.28,157,61,.54*level,out);
+      const tail=this.hiss(t+.12,.52,695,.43*level,.69,.026,out);
+      tail.onended=()=>out.disconnect();
     }
 
     debrisLand(material,level,pan) {
@@ -2483,14 +2496,18 @@
     }
   }
 
+  function looseFragment(pos,velocity,life,size,mesh,impactMaterial) {
+    return {pos,velocity,life,total:life,size,kind:"fragment",mesh,impactMaterial,
+      angles:[rng()*6.28,rng()*6.28,rng()*6.28],
+      spin:[mix(-13,13,rng()),mix(-16,16,rng()),mix(-16,16,rng())]};
+  }
+
   function scatterBlast(site,collapsed) {
     const sideways=[-site.normal[2],0,site.normal[0]];
     function fragment(pos,velocity,life,size,piece) {
       const floor=Math.max(terrain.height(pos[0],pos[2]),Valley.roadview.floor(map.road,pos[0],pos[2],pos[1]+.02).top);
-      particles.push({pos,velocity,life,total:life,size,kind:"fragment",floor,
-        mesh:site.debris[piece],impactMaterial:piece<3 ? "masonry" : piece<5 ? "metal" : "wood",
-        angles:[rng()*6.28,rng()*6.28,rng()*6.28],
-        spin:[mix(-13,13,rng()),mix(-16,16,rng()),mix(-16,16,rng())]});
+      const material=piece<3 ? "masonry" : piece<5 ? "metal" : "wood";
+      particles.push({...looseFragment(pos,velocity,life,size,site.debris[piece],material),floor});
     }
     for(let i=0;i<105;i++) {
       const wall=i%3!==0, turn=rng()*Math.PI*2;
@@ -2518,6 +2535,82 @@
         velocity:times(direction,mix(3.1,16.6,rng())),life,total:life,size:mix(.023,.082,rng()),
         color:[1,.61,.20],alpha:mix(.54,.96,rng()),kind:"spark",streak:true});
     }
+  }
+
+  function loseTimberSupport(structure) {
+    function lowerFloor(x,y,z) {
+      const supported=structure.timber.some(box=>{
+        if(Math.abs(y-box.top)>.09) return false;
+        const [u,v]=Valley.roadview.local(box,x,z);
+        return Math.abs(u)<=box.hx+.01 && Math.abs(v)<=box.hz+.01;
+      });
+      if(!supported) return null;
+      const floor=terrain.solidHeight(map,x,z,undefined,y+.039);
+      return floor<y-.065 ? floor : null;
+    }
+    for(const prop of map.props) {
+      if(!prop.mass || prop.broken || prop.picked || prop.support || prop.flight || prop.installed) continue;
+      if(lowerFloor(prop.x,prop.bed??prop.y,prop.z)===null) continue;
+      if(player.seat===prop) {
+        player.seat=player.exit=null;
+        prop.occupied=false;
+      }
+      prop.bedX=undefined;
+      props.toss(prop,[prop.x,prop.y,prop.z],[prop.vx,-.18,prop.vz],prop.yaw,.21);
+    }
+    if(!player.seat && !player.swim.active) {
+      const floor=lowerFloor(player.x,player.ground,player.z);
+      if(floor!==null) {
+        player.ground=floor;
+        player.grounded=false;
+      }
+    }
+    for(const shot of shots) {
+      if(shot.state!=="rest" || shot.restOn || lowerFloor(...shot.pos)===null) continue;
+      Object.assign(shot,{state:"flight",age:0,velocity:[0,-.25,0]});
+    }
+  }
+
+  function collapseTimber(structure,at) {
+    loseTimberSupport(structure);
+    const offset=minus(at,[player.x,player.viewBase+player.eyeHeight,player.z]);
+    const distance=Math.hypot(...offset);
+    const pan=(offset[0]*Math.cos(player.yaw)+offset[2]*Math.sin(player.yaw))/Math.max(2,distance);
+    audio.woodCollapse((1-smooth(12,48,distance))/(1+(distance/9)**1.18),pan);
+    if(distance>108) return;
+
+    const scene=map.road.interior;
+    scene.timberDebris??=[[1.03,.095,.215],[.68,.060,.164],[1.30,.106,.182]].map(([w,h,d],i)=>{
+      const b=new Builder(), edge=rgb(0x563c2b);
+      b.box([0,0,0],[w,h,d],rgb(i===1 ? 0x2e211b : 0x392822),.009);
+      b.triangle([w/2,h*.47,-d*.43],[w/2,h*.47,d*.40],[w*.64,h*.26,d*.20],edge);
+      b.triangle([-w/2,h*.47,d*.43],[-w/2,h*.47,-d*.40],[-w*.63,h*.18,-d*.15],edge);
+      return renderer.mesh(b,scene.material.wood);
+    });
+    const {timber}=structure, stairs=structure.kind==="woodStair";
+    function sample(i,count) {
+      const box=timber[Math.floor(i*timber.length/count)];
+      const x=(rng()-.5)*box.hx*1.58,z=(rng()-.5)*box.hz*1.62;
+      return [box.x+box.c*x+box.s*z,box.top+.021,box.z-box.s*x+box.c*z];
+    }
+    const count=stairs ? 24 : 18;
+    for(let i=0;i<count;i++) {
+      const board=i%3!==2, size=board ? mix(.66,1.41,rng()) : mix(.18,.46,rng());
+      const part=looseFragment(sample(i,count),[mix(-1.25,1.25,rng()),mix(-2.65,.52,rng()),mix(-1.25,1.25,rng())],
+        mix(7.2,12.6,rng()),size,scene.timberDebris[i%3],"wood");
+      part.angles=[mix(-.24,.31,rng()),structure.yaw+(stairs ? 0 : Math.PI/2)+mix(-.3,.3,rng()),mix(-.23,.24,rng())];
+      part.clearance=.060*size;
+      particles.push(part);
+    }
+    for(let i=0;i<32;i++) {
+      const life=mix(.42,1.29,rng()), heat=rng();
+      particles.push({pos:sample(i,32),velocity:[mix(-3.3,3.3,rng()),mix(.84,4.42,rng()),mix(-3.3,3.3,rng())],
+        life,total:life,size:mix(.022,.052,rng()),color:[1,mix(.46,.81,heat),.14],alpha:mix(.70,.99,heat),
+        kind:"spark",streak:heat>.55});
+    }
+    const puffs=Array.from({length:17},(_,i)=>({origin:sample(i,17),velocity:[mix(-1.9,1.9,rng()),mix(-.83,.85,rng()),mix(-1.9,1.9,rng())],
+      start:sceneTime+mix(.01,.33,rng()),life:mix(1.42,3.9,rng()),size:mix(.34,.82,rng()),seed:rng(),kind:i%4 ? 2 : 1}));
+    bursts.push({at:structure.at,time:sceneTime,flash:.12,puffs});
   }
 
   function detonate(site,aspect) {
@@ -3328,8 +3421,11 @@
       p.life -= dt;
       velocity[1] -= gravity*dt;
       p.pos = [pos[0]+velocity[0]*dt,pos[1]+(velocity[1]+(water ? gravity*.5*dt : 0))*dt,pos[2]+velocity[2]*dt];
-      if(fragment && p.pos[1]<p.floor+p.size*.25) {
-        p.pos[1]=p.floor+p.size*.25;
+      const floor=fragment ? p.floor??Math.max(terrain.height(p.pos[0],p.pos[2]),
+        Valley.roadview.floor(map.road,p.pos[0],p.pos[2],pos[1]+.04).top) : -Infinity;
+      const clearance=p.clearance??p.size*.25;
+      if(fragment && p.pos[1]<floor+clearance) {
+        p.pos[1]=floor+clearance;
         const speed=-velocity[1];
         if(p.impactMaterial && p.life>0 && speed>1.12 && (p.landings??0)<2) {
           p.landings=(p.landings??0)+1;
@@ -3345,6 +3441,7 @@
         velocity[2]*=.62;
         if(!velocity[1] && p.spin.some(Boolean)) {
           p.angles=plus(p.angles,times(p.spin,p.total-p.life));
+          if(p.clearance) p.angles=[0,p.angles[1],0];
           p.spin=[0,0,0];
         }
       }
@@ -3401,7 +3498,7 @@
     }
     audio.fireSystem(utilities.fireSound(map.road.services,[player.x,player.feet+player.eyeHeight,player.z],player.yaw,sceneTime));
     while(bursts.length && sceneTime-bursts[0].time>utilities.burstLife) bursts.shift();
-    fire.expire(map.road.interior,fires,sceneTime);
+    fire.update(map,fires,sceneTime,collapseTimber);
     updateDiscarded(dt);
     updateParticles(dt);
     if(practiceRound) animationDemo?.update(dt);

@@ -142,9 +142,7 @@
     a.quad(m.diningFloor,[[lo+.074,.021,near+.003],[lo+.074,.021,platform-.003],
       [hi-.074,.021,platform-.003],[hi-.074,.021,near+.003]],tile,
       [[lo,near],[lo,platform],[hi,platform],[hi,near]]);
-    a.box(m.wood,[middle,top/2,(platform+far)/2],[width-.133,top,far-platform],oak,
-      {kind:"wood",stepBank:"indoorWood"});
-    suites.planks(a,m,lo+.069,hi-.069,platform+.006,far-.005,top+.006,floor);
+    Valley.utilities.timberFloor(scene,a,[lo+.0665,hi-.0665,platform,far],top,floor,{thickness:top});
     a.box(m.wood,[middle,.472,far-.018],[width-.129,.735,.037],panel);
     a.box(m.wood,[middle,.835,far-.035],[width-.123,.065,.067],walnut,{radius:.006});
     a.box(m.wood,[middle,top-.011,platform-.018],[width-.138,.045,.079],walnut,

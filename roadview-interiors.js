@@ -5,6 +5,7 @@
   const wood=rgb(0xa7784f), darkWood=rgb(0x765139), paleWood=rgb(0xc49a70), brass=rgb(0xb29863);
   const ivory=rgb(0xe9e9df), porcelain=rgb(0xe9f0ed), silver=rgb(0xa8b6ba), dark=rgb(0x393b38);
   const holdTime=.48, lightLimit=10;
+  const charredFixture={charred:true};
   const stableIgnition=1.72, ignitionRandom=random(10484);
   const jetGravity=10.1, dropRandom=random(4781);
   const pressureDrops=Array.from({length:112},(_,i)=>({
@@ -625,7 +626,7 @@
       }
       const matrix=fixtureMatrix(item);
       const list=item.kind==="glass" && !item.opaqueGlass ? glass : opaque;
-      for(const mesh of item.meshes) list.push({mesh,matrix,effect:item.effectMesh===mesh ? item.effect : undefined});
+      for(const mesh of item.meshes) list.push({mesh,matrix,effect:item.effectMesh===mesh ? item.effect : item.charred ? charredFixture : undefined});
       if(item.kind==="light") {
         const lamp=transform(item.lampAt,0,item.yaw);
         for(const mesh of item.on ? item.lit : item.unlit) opaque.push({mesh,matrix:lamp});

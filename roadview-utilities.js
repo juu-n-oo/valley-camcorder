@@ -189,7 +189,7 @@
     Object.assign(site,{intact,rim,fireSurfaces,breach:a.at([x,1.12,z])});
   }
 
-  function breakableStructure(scene,a,kind,origin,draw) {
+  function breakableStructure(scene,a,type,origin,draw) {
     const boxes=[];
     const meshes=Valley.lodging.model(scene,part=>draw({
       at:a.at,yaw:a.yaw,
@@ -199,14 +199,33 @@
       },
       beam(material,from,to,start,end,tint,sides) {
         part(material).cylinder(minus(from,origin),minus(to,origin),start,end,tint,sides);
+      },
+      quad(material,vertices,tint,uv) {
+        part(material).quad(vertices.map(at=>minus(at,origin)),tint,null,uv);
       }
     }));
-    const item=Valley.lodging.fixture(scene,a,kind,origin,0,meshes);
+    const item=Valley.lodging.fixture(scene,a,type,origin,0,meshes);
+    if(type==="woodFloor" || type==="woodStair") item.timber=[];
     for(const {at,size,yaw,kind,stair,stepBank} of boxes) {
       const bounds=scene.collider(...a.at(at),size,a.yaw+yaw,kind,kind,0,stair,stepBank);
       bounds.fixture=item;
+      if(kind==="wood") item.timber?.push(bounds);
     }
     return item;
+  }
+
+  function timberFloor(scene,a,[lo,hi,near,far],top,tint,{thickness=.158,ceiling=false}={}) {
+    const m=scene.material, columns=Math.ceil((hi-lo)/3.8), rows=Math.ceil((far-near)/3.8);
+    const depth=(far-near)/rows, width=(hi-lo)/columns;
+    const wood=rgb(0xa98a68), lining=rgb(0xe0ddd2);
+    for(let row=0;row<rows;row++) for(let column=0;column<columns;column++) {
+      const x0=lo+column*width, z0=near+row*depth, x=x0+width/2, z=z0+depth/2;
+      breakableStructure(scene,a,"woodFloor",[x,top,z],target=>{
+        target.box(m.wood,[x,top-thickness/2,z],[width,thickness,depth],wood,{kind:"wood",stepBank:"indoorWood"});
+        if(ceiling) target.box(m.paint,[x,top-thickness-.002,z],[width,.012,depth],lining);
+        Valley.roadSuites.planks(target,m,x0,x0+width,z0,z0+depth,top+.007,tint);
+      });
+    }
   }
 
   function breakableStair(scene,a,site,origin,draw) {
@@ -467,7 +486,7 @@
     for(const event of bursts) {
       const offset=minus(event.at,cam.at), distance=Math.hypot(...offset), age=time-event.time;
       if(distance>108) continue;
-      const flash=(1-smooth(.035,.43,age))*1.13;
+      const flash=(1-smooth(.035,.43,age))*(event.flash??1.13);
       if(flash>0) {
         const facing=distance<.8 ? 1 : smooth(-.35,.63,dot(offset,cam.forward)/distance);
         exposure=Math.max(exposure,flash*(1-smooth(2,38,distance))*mix(.32,1,facing));
@@ -493,5 +512,5 @@
     return {data,exposure,light:light ? [...light.at,light.flash] : fireLight??clearView.light};
   }
 
-  Valley.utilities={build,wall,upperWall,breakableStair,bind,disable,fireSound,fireVisuals,tableSet,burst,burstLife,visuals};
+  Valley.utilities={build,wall,upperWall,breakableStair,breakableStructure,timberFloor,bind,disable,fireSound,fireVisuals,tableSet,burst,burstLife,visuals};
 })();
