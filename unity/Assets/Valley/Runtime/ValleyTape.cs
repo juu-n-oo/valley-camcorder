@@ -30,9 +30,10 @@ namespace ValleyCamcorder
             GUI.DrawTexture(new Rect(frame.xMax,0,Screen.width-frame.xMax,Screen.height),Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(left,0,width,top),Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(left,top+height,width,Screen.height-top-height),Texture2D.whiteTexture);
-            if(player.Underwater)
+            if(player.Underwater || player.Paused || player.Rewinding)
             {
-                GUI.color=new Color(.13f,.38f,.26f,.15f);
+                GUI.color=player.Rewinding ? new Color(.095f,.042f,.51f,.83f) :
+                    player.Paused ? new Color(.025f,.025f,.035f,.53f) : new Color(.13f,.38f,.26f,.22f);
                 GUI.DrawTexture(new Rect(left,top,width,height),Texture2D.whiteTexture);
             }
             text??=new GUIStyle(GUI.skin.label) { fontStyle=FontStyle.Bold, alignment=TextAnchor.MiddleLeft };
@@ -43,10 +44,24 @@ namespace ValleyCamcorder
             var seconds=Mathf.FloorToInt(Time.timeSinceLevelLoad);
             var inset=height*.08f;
             Tag(left+inset,top+height*.06f,$"●  REC   {seconds/3600:00}:{seconds/60%60:00}:{seconds%60:00}");
-            Tag(left+inset,top+height*.11f,player.InRange ? $"TARGET RANGE    {player.MarkedCount:00} / {player.targets.Length:00}" :
+            var rangeSeconds=Mathf.FloorToInt(player.RangeTime);
+            Tag(left+inset,top+height*.11f,player.InRange ?
+                $"TARGET RANGE    {player.MarkedCount:00}/{player.targets.Length:00}    {rangeSeconds/60:00}:{rangeSeconds%60:00}" :
                 player.Underwater ? "SUBMERGED" : "HWAYANG VALLEY");
-            if(player.ToyVisible)Tag(left+inset,top+height*.870f,$"MINICARS   {player.Ammo:00} / 05");
-            var caption=player.Prompt;
+            var gear=player.Equipment;
+            if(player.Underwater) Tag(left+inset,top+height*.16f,$"BREATH  {Mathf.CeilToInt(player.Air):00} / 20");
+            Tag(left+inset,top+height*.77f,$"HP  {player.Health:00} / 100");
+            if(gear!=null && gear.Visible)
+            {
+                Tag(left+inset,top+height*.815f,$"{gear.Label}    {gear.Ammo:00} / {gear.Capacity:00}");
+                var reserve=gear.Selected==1 ? "RESERVE" : "CARTS LEFT";
+                Tag(left+inset,top+height*.86f,$"TOTAL {gear.Total:00}    {reserve} {gear.Reserve:00}");
+                if(gear.Selected==2) Tag(left+inset,top+height*.905f,gear.Powered ? "M  MOTOR  ON" : "M  MOTOR  OFF");
+            }
+            var supply=player.Resupply;
+            var caption=player.Paused ? "PLAYBACK PAUSED" : player.Rewinding ? "◀◀  REWIND" : supply!=null && supply.Active ?
+                supply.Busy ? $"RESUPPLYING    {Mathf.FloorToInt(supply.Progress*100):00}%" :
+                gear.Selected==1 ? "+12 MINICARS" : "+2 CARTRIDGES" : player.Prompt;
             if (!string.IsNullOrEmpty(caption))
             {
                 var w=text.CalcSize(new GUIContent(caption)).x+22;
@@ -58,10 +73,11 @@ namespace ValleyCamcorder
             Label(d,"PM 2:41",stamp);
             if (Cursor.lockState!=CursorLockMode.Locked)
             {
-                const string controls="CLICK TO LOOK    WASD MOVE    H PICK UP    E USE    F RANGE";
+                const string controls="CLICK TO PLAY    WASD MOVE    1–3 EQUIP    R RELOAD    Z DIVE    F RANGE";
                 var strip=text.CalcSize(new GUIContent(controls)).x+22;
                 Tag(left+width*.5f-strip*.5f,top+height*.94f,controls);
             }
+            if(gear==null || !gear.Visible || gear.Aiming || gear.Busy || player.Paused || player.Rewinding) {GUI.color=Color.white; return;}
             GUI.color=new Color(.99f,.99f,.87f,.67f);
             var x=left+width*.50f;
             var y=top+height*.50f;

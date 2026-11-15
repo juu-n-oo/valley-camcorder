@@ -175,6 +175,12 @@ Shader "Valley/Weathered Surface"
                     albedo=lerp(albedo,half3(.44,.57,.58),grazing);
                 }
                 else if (_Kind==23) albedo*=SAMPLE_TEXTURE2D(_BaseMap,sampler_BaseMap,input.uv).rgb;
+                else if (_Kind==33)
+                {
+                    half3 frame=SAMPLE_TEXTURE2D(_BaseMap,sampler_BaseMap,input.uv).rgb;
+                    half scan=.87h+.13h*sin(input.uv.y*750);
+                    albedo=frame*half3(.71h,.86h,.81h)*scan;
+                }
                 else if (_Kind==10 || _Kind==11 || _Kind==12 || _Kind==16 || _Kind==7 || _Kind==14 ||
                          _Kind==13 || _Kind==19 || _Kind==20 || _Kind==22 || _Kind==25 || _Kind==26 ||
                          _Kind==27 || _Kind==28 || _Kind==35 || _Kind==36 || _Kind==42 || _Kind==43 || _Kind==46)
@@ -218,7 +224,7 @@ Shader "Valley/Weathered Surface"
                 material.metallic=_Metallic;
                 material.occlusion=occlusion;
                 material.alpha=alpha;
-                material.emission=emissions+(_Kind==30 ? albedo*.83 : 0);
+                material.emission=emissions+(_Kind==30 || _Kind==33 ? albedo*.83 : 0);
                 half4 color=UniversalFragmentPBR(lighting,material);
                 return half4(MixFog(color.rgb,input.fog),alpha);
             }

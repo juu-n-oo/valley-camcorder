@@ -423,13 +423,6 @@ namespace ValleyCamcorder.Editor
             foreach(var shape in a.map.launcher.parts.Concat(a.map.launcher.glass))
                 ValleyManifest.ApplyMatrix(Draw(a,shape.mesh,toy).transform,shape.matrix);
             player.toy=toy.gameObject;
-            var car=Draw(a,a.map.launcher.cars[0],parent);
-            car.name="Mini-car model";
-            var chassis=car.AddComponent<BoxCollider>();
-            chassis.size=car.GetComponent<MeshFilter>().sharedMesh.bounds.size;
-            chassis.center=car.GetComponent<MeshFilter>().sharedMesh.bounds.center;
-            car.SetActive(false);
-            player.minicar=car;
             player.targets=BuildRangeTargets(a,world.transform);
             var hud=head.gameObject.AddComponent<ValleyTape>();
             hud.view=camera; hud.player=player; hud.exterior=horizon;

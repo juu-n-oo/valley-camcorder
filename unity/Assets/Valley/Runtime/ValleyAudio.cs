@@ -10,10 +10,18 @@ namespace ValleyCamcorder
         public Transform listener;
         public ValleyWorld world;
         readonly Dictionary<string,List<AudioClip>> banks = new();
-        AudioSource steps, breath, falls;
-        float fatigue, distance, nextBreath;
+        readonly Dictionary<string,List<AudioClip>> worldCues=new();
+        readonly Dictionary<string,AudioClip> effects=new();
+        AudioSource steps, breath, falls, cues, mechanism, resupply, depth;
+        AudioLowPassFilter cueFilter, motorFilter, fallsFilter;
+        float mechanismTarget, depthTarget;
+        float fatigue, distance, nextBreath, brushDistance;
         bool hadEffort;
         AudioClip previous;
+        public string LastCue { get; private set; }
+        public string LastWorldCue { get; private set; }
+        public string SearchBank { get; private set; }
+        public bool HasCue(string name) => effects.ContainsKey(name);
 
         void Awake()
         {
@@ -26,6 +34,22 @@ namespace ValleyCamcorder
             }
             steps=gameObject.AddComponent<AudioSource>();
             breath=gameObject.AddComponent<AudioSource>();
+            foreach(var clip in Resources.LoadAll<AudioClip>("ValleyEffects")) effects[clip.name]=clip;
+            foreach(var clip in Resources.LoadAll<AudioClip>("ValleyFixtureAudio"))
+            {
+                var key=clip.name[..clip.name.LastIndexOf('-')];
+                if(!worldCues.TryGetValue(key,out var clips)) worldCues[key]=clips=new List<AudioClip>();
+                clips.Add(clip);
+            }
+            cues=Source("Toy effects");
+            mechanism=Source("Toy motor");
+            cueFilter=cues.gameObject.AddComponent<AudioLowPassFilter>();
+            motorFilter=mechanism.gameObject.AddComponent<AudioLowPassFilter>();
+            resupply=Source("Resupply recordings");
+            depth=Source("Underwater sound");
+            depth.loop=mechanism.loop=true;
+            depth.volume=mechanism.volume=0;
+            if(effects.TryGetValue("underwater",out var underwater)) depth.clip=underwater;
             falls=new GameObject("Waterfall audio").AddComponent<AudioSource>();
             falls.transform.SetParent(transform,false);
             falls.loop=true;
@@ -33,6 +57,7 @@ namespace ValleyCamcorder
             falls.minDistance=32;
             falls.maxDistance=88;
             falls.clip=WaterLoop();
+            fallsFilter=falls.gameObject.AddComponent<AudioLowPassFilter>();
             falls.volume=0;
             falls.Play();
         }
@@ -43,7 +68,96 @@ namespace ValleyCamcorder
             var at=world.Map.FallPoint(listener.position);
             falls.transform.position=at;
             var range=Vector3.Distance(at,listener.position);
-            falls.volume=.62f*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(10,62,range)));
+            falls.volume=.62f*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(5,74,range)))*(1-.82f*depthTarget);
+            Fade(mechanism,mechanismTarget,Time.deltaTime);
+            Fade(depth,depthTarget,Time.deltaTime);
+            var cutoff=Mathf.Lerp(22000,610,Mathf.SmoothStep(0,1,depth.volume/.47f));
+            cueFilter.cutoffFrequency=motorFilter.cutoffFrequency=fallsFilter.cutoffFrequency=cutoff;
+        }
+
+        AudioSource Source(string name)
+        {
+            var child=new GameObject(name);
+            child.transform.SetParent(transform,false);
+            var source=child.AddComponent<AudioSource>();
+            source.playOnAwake=false;
+            return source;
+        }
+
+        static void Fade(AudioSource source,float target,float dt)
+        {
+            source.volume=Mathf.MoveTowards(source.volume,target,dt*(target>0 ? 8 : 6));
+            if(target>0 && !source.isPlaying && source.clip) source.Play();
+            if(target==0 && source.volume<.001f && source.isPlaying) source.Stop();
+        }
+
+        public void Cue(string name,float volume=1)
+        {
+            if(!effects.TryGetValue(name,out var clip)) return;
+            LastCue=name;
+            cues.pitch=UnityEngine.Random.Range(.96f,1.055f);
+            cues.PlayOneShot(clip,volume);
+        }
+
+        public void Mechanism(string name)
+        {
+            mechanismTarget=name!=null && effects.TryGetValue(name,out _) ? .69f : 0;
+            if(mechanismTarget>0 && mechanism.clip!=effects[name])
+            {
+                mechanism.Stop();
+                mechanism.clip=effects[name];
+                mechanism.volume=0;
+            }
+        }
+
+        public void WorldCue(string key,Vector3 at,float volume)
+        {
+            AudioClip clip;
+            var recording=key=="ceramic" && !worldCues.ContainsKey(key) ? "small" : key;
+            if(worldCues.TryGetValue(recording,out var choices)) clip=choices[UnityEngine.Random.Range(0,choices.Count)];
+            else if(!effects.TryGetValue(key,out clip)) return;
+            LastWorldCue=key;
+            var source=WorldSource(key,at,transform,volume);
+            source.clip=clip;
+            source.pitch=UnityEngine.Random.Range(.92f,1.08f)*(key=="ceramic" ? .78f : 1);
+            if(key=="blast") {source.maxDistance=105; source.minDistance=9;}
+            source.Play();
+            Destroy(source.gameObject,clip.length/source.pitch+.15f);
+        }
+
+        public AudioSource WorldLoop(string key,Vector3 at,Transform parent,float volume)
+        {
+            if(!effects.TryGetValue(key,out var clip)) return null;
+            var source=WorldSource(key,at,parent,volume);
+            source.clip=clip;
+            source.loop=true;
+            source.Play();
+            return source;
+        }
+
+        static AudioSource WorldSource(string key,Vector3 at,Transform parent,float volume)
+        {
+            var node=new GameObject(key+" sound");
+            node.transform.SetParent(parent);
+            node.transform.position=at;
+            var source=node.AddComponent<AudioSource>();
+            source.spatialBlend=.87f;
+            source.rolloffMode=AudioRolloffMode.Linear;
+            source.minDistance=1.1f;
+            source.maxDistance=14;
+            source.volume=volume;
+            source.playOnAwake=false;
+            return source;
+        }
+
+        public void WaterDepth(float amount) => depthTarget=Mathf.SmoothStep(0,1,Mathf.InverseLerp(.012f,.205f,amount))*.62f;
+
+        public void Land(RaycastHit floor,float speed)
+        {
+            var bank=floor.collider ? floor.collider.GetComponent<ValleySurface>()?.bank : null;
+            var wood=bank!=null && bank.Contains("Wood",StringComparison.OrdinalIgnoreCase);
+            Play(steps,wood ? "woodLand" : speed>=5.6f ? "rockHeavyLand" : "rockLand",.50f,.94f);
+            if(speed>6.15f) Play(breath,"landingEffort",.38f,.96f);
         }
 
         AudioClip WaterLoop()
@@ -72,7 +186,7 @@ namespace ValleyCamcorder
             return loop;
         }
 
-        public void Move(float travelled, float rise, bool running, bool grounded, bool wet, RaycastHit floor)
+        public void Move(float travelled,float rise,bool running,bool grounded,bool wet,RaycastHit floor,string groundBank)
         {
             var dt=Time.deltaTime;
             if (travelled>.005f && grounded && !wet)
@@ -80,7 +194,18 @@ namespace ValleyCamcorder
                 distance+=travelled;
                 var marker=floor.collider ? floor.collider.GetComponent<ValleySurface>() : null;
                 var material=marker?.bank ?? "outdoorStone";
-                if (material=="terrain") material=floor.textureCoord.x>.60f ? "dirtLeaf" : "outdoorStone";
+                if(material=="terrain") material=groundBank;
+                if(material=="indoorWood") material="outdoorWood";
+                if(material=="grass")
+                {
+                    brushDistance+=travelled;
+                    if(brushDistance>.73f)
+                    {
+                        brushDistance=0;
+                        Play(steps,"grassBrush",running ? .36f : .22f,1.03f);
+                    }
+                }
+                else brushDistance=0;
                 var stride=running ? .96f : .79f;
                 if (marker && marker.stair) stride*=.79f;
                 if (distance>=stride)
@@ -111,7 +236,12 @@ namespace ValleyCamcorder
             }
         }
 
-        public void Search(string kind) => Play(steps,"supply-"+kind,.68f,1f);
+        public void Search(string kind)
+        {
+            resupply.Stop();
+            SearchBank=kind;
+            if(kind!=null) Play(resupply,"supply-"+kind,.68f,1);
+        }
 
         float Play(AudioSource source,string bank,float volume,float pitch)
         {

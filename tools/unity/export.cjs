@@ -3,12 +3,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const zlib = require("node:zlib");
+const meshBundle = require("./mesh-bundle.cjs");
+const {exportInteractions,exportFixtureRecordings} = require("./interactions-export.cjs");
 const { createCanvas } = require("@napi-rs/canvas");
 const sharp = require("sharp");
 
 const root = path.resolve(__dirname, "../..");
-const destination = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root,"unity","Assets","Valley","Source");
+const interactionsOnly=process.argv[2]==="--interactions";
+const destination = process.argv[2] && !interactionsOnly ? path.resolve(process.argv[2]) : path.join(root,"unity","Assets","Valley","Source");
 const read = name => fs.readFileSync(path.join(root, name), "utf8");
 const context = vm.createContext({ atob, document: { createElement: () => createCanvas(1, 1) } });
 function load(file) { vm.runInContext(read(file), context, {filename:file}); }
@@ -100,10 +102,16 @@ for (const item of world.props) {
   if (item.picked || item.broken) continue;
   const meshes = meshIds(item.parts.map(part=>part.mesh));
   if (!meshes.length) continue;
+  owners.set(item,objects.length);
   objects.push({kind:item.kind,label:item.kind,meshes,matrix:matrix(item),portable:portable.has(item.kind),
     mass:item.mass || 1,size:[item.rx*2,item.height,item.rz*2], small:!!item.small, car:-1, door:-1, pane:-1,
     parent:owners.get(item.installed?.parent)??-1, grip:item.gripAnchors?.[0] ? pos(item.gripAnchors[0].at) : null});
 }
+
+const resources=path.join(path.dirname(destination),"Resources");
+exportInteractions(path.join(resources,"ValleyMap"),V,world,sourceFixtures,owners);
+exportFixtureRecordings(root,path.join(resources,"ValleyFixtureAudio"));
+if(interactionsOnly) process.exit(0);
 
 const unique = new Set(Array.from(world.road.cells.values()).flat());
 const boxes = [...unique].filter(box=>!box.noWalk && !box.fixture?.broken && box.top>box.bottom).map(box=>({
@@ -169,30 +177,11 @@ for (let id=0;id<meshes.length;id++) {
 }
 if(group.length) groups.push(group);
 
-function encodedMesh(id) {
-  const {material,shape:{vertices,indices}}=meshes[id];
-  const count=vertices.length/11, width=count>65535 ? 4 : 2;
-  const buffer=Buffer.allocUnsafe(20+count*29+indices.length*width);
-  buffer.writeInt32LE(id,0); buffer.writeInt32LE(material,4); buffer.writeInt32LE(count,8);
-  buffer.writeInt32LE(indices.length,12); buffer.writeInt32LE(width,16);
-  let at=20;
-  for(let i=0;i<vertices.length;i+=11) {
-    for(let j=0;j<3;j++) at=buffer.writeFloatLE(vertices[i+j],at);
-    for(let j=3;j<6;j++) at=buffer.writeInt16LE(Math.round(Math.max(-1,Math.min(1,vertices[i+j]))*32767),at);
-    for(let j=6;j<8;j++) at=buffer.writeFloatLE(vertices[i+j],at);
-    for(let j=8;j<11;j++) at=buffer.writeUInt8(Math.round(Math.max(0,Math.min(1.35,vertices[i+j]))*180),at);
-  }
-  for(const index of indices) at=width===4 ? buffer.writeUInt32LE(index,at) : buffer.writeUInt16LE(index,at);
-  return buffer;
-}
 const meshFolder=path.join(out,"Meshes");
 let total=0;
 for(const [i,ids] of groups.entries()) {
   const name="Meshes-"+String(i).padStart(3,"0")+".valleymesh";
-  const header=Buffer.alloc(8);
-  header.write("VCM1");
-  header.writeUInt32LE(ids.length,4);
-  const payload=zlib.gzipSync(Buffer.concat([header,...ids.map(encodedMesh)]),{level:6});
+  const payload=meshBundle(meshes,ids);
   fs.writeFileSync(path.join(meshFolder,name),payload);
   total+=payload.length;
 }

@@ -45,11 +45,12 @@ namespace ValleyCamcorder
                 if (side<0) frame.localScale=new Vector3(-1,1,1);
             }
 
-            public void Drive(Transform view, Vector3 contact, float grasp, float blend, float dt, bool active)
+            public void Drive(Transform view,Vector3 contact,float grasp,float blend,float dt,bool active,float trigger=-1)
             {
                 var localIdle = new Vector3(side*.29f,-.47f,.33f);
                 var shoulder=view.TransformPoint(new Vector3(side*.22f,-.303f,-.077f));
-                const float above=.29f, below=.28f;
+                var above=trigger>=0 ? .35f : .30f;
+                var below=trigger>=0 ? .33f : .29f;
                 var goal=Vector3.Lerp(view.TransformPoint(localIdle),contact,blend);
                 var approach=(goal-shoulder).normalized;
                 var controlUp=Vector3.ProjectOnPlane(view.up*.28f-view.right*side*.93f,approach);
@@ -79,7 +80,9 @@ namespace ValleyCamcorder
                     var bone=digits[i];
                     var thumb=bone.name.StartsWith("Thumb",StringComparison.OrdinalIgnoreCase);
                     var degree=bone.name.EndsWith("01",StringComparison.Ordinal) ? 41 : 60;
-                    bone.localRotation=rest[i]*Quaternion.AngleAxis(closing*(thumb ? degree*.62f : degree),Vector3.right);
+                    var curl=trigger>=0 && bone.name.StartsWith("Index",StringComparison.OrdinalIgnoreCase) ?
+                        Mathf.Lerp(.33f,.78f,trigger) : closing;
+                    bone.localRotation=rest[i]*Quaternion.AngleAxis(curl*(thumb ? degree*.62f : degree),Vector3.right);
                 }
                 frame.gameObject.SetActive(active);
                 upper.gameObject.SetActive(active);
@@ -107,17 +110,30 @@ namespace ValleyCamcorder
               t.name.EndsWith("02",StringComparison.Ordinal) || t.name.EndsWith("03",StringComparison.Ordinal));
         }
 
-        public void Drive(ValleyFixture item,float progress,float grasp,Transform tool,float draw)
+        public void Drive(ValleyFixture item,float progress,float grasp,ValleyEquipment tool,bool swim,float gait,float dt)
         {
             bool enabled = item != null && progress>.03f;
-            bool handle=!enabled && tool && draw>.12f;
-            var anchor=enabled ? item.Contact : handle ? tool.TransformPoint(new Vector3(.029f,-.135f,-.029f)) :
-                view.TransformPoint(new Vector3(.20f,-.42f,.32f));
+            bool handle=!enabled && tool.Visible;
+            var anchor=enabled ? item.Contact : handle ? tool.Grip : Stroke(1,gait);
             var wide=enabled && item.portable && !item.small ? Mathf.Clamp(item.size.x*.30f,.16f,.31f) : 0;
             var across=enabled ? item.transform.right : view.right;
-            var dt=Mathf.Clamp(Time.deltaTime,.001f,.04f);
-            right.Drive(view,anchor+across*wide,handle ? .86f : grasp,handle ? draw : progress,dt,enabled || handle);
-            left.Drive(view,anchor-across*wide,grasp,progress,dt,enabled && wide>0);
+            right.Drive(view,anchor+across*wide,handle ? .86f : swim && !enabled ? .40f : grasp,
+                handle ? tool.Draw : swim && !enabled ? 1 : progress,dt,enabled || handle || swim,handle ? tool.Trigger : -1);
+            if(handle && tool.Support is Vector3 contact)
+                left.Drive(view,contact,tool.Action.Length==0 ? .88f : .72f,tool.Draw,dt,true);
+            else if(!enabled && swim)
+                left.Drive(view,Stroke(-1,gait),.40f,1,dt,true);
+            else
+                left.Drive(view,anchor-across*wide,grasp,progress,dt,enabled && wide>0);
+        }
+
+        Vector3 Stroke(float side,float phase)
+        {
+            var motion=phase+(side>0 ? Mathf.PI : 0);
+            var swing=Mathf.Sin(motion);
+            var stretch=.5f-.5f*Mathf.Cos(motion);
+            return view.TransformPoint(new Vector3(side*(.26f-.08f*stretch+.05f*swing),
+                -.37f+.13f*Mathf.Max(0,swing),.32f+.25f*stretch));
         }
     }
 }
