@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const { rgb, mix, times } = Valley;
+  const { rgb, mix, times, minus } = Valley;
   const { storeyHeight } = Valley.roadLayout;
   const plaster=rgb(0xc4beb0), granite=rgb(0xb0a697), wood=rgb(0xad8966);
   const beam=rgb(0x6f4935), charcoal=rgb(0x4c4942), red=rgb(0x904c3d);
@@ -87,12 +87,16 @@
         }
         for(let x=-half+.12;x<half;x+=curved ? .245 : .52) {
           const q=top(x/half,1,side),p=top(x/half,.897,side);
-          a.beam(m.tile,q,p,curved ? .071 : .026,curved ? .058 : .026,times(color,.93+rng()*.24),6);
+          const tint=times(color,.93+rng()*.24);
           if(curved) {
             const [xx,yy,zz]=q;
-            a.oval(m.tile,[xx,yy-.006,zz+side*.024],[.077,.064,.026],times(color,1.19));
+            const run=minus(p,q), length=Math.hypot(...run);
+            a.blender("clay_eave_tile",q.map((coord,i)=>mix(coord,p[i],.44)),{
+              scale:[.163,.121,length*1.16],turn:Math.atan2(run[0],run[2]),
+              pitch:-Math.atan2(run[1],Math.hypot(run[0],run[2])),tint
+            });
             a.beam(m.wood,[p[0],p[1]-.14,p[2]*.86],[xx,yy-.136,zz*.97],.044,.049,red,6);
-          }
+          } else a.beam(m.tile,q,p,.026,.026,tint,6);
         }
         for(const end of [-1,1]) {
           const topPoint=top(end,0,side),edge=top(end,1,side);

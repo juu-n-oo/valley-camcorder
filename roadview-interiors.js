@@ -2,6 +2,7 @@
 
 (() => {
   const {Builder,clamp,mix,smooth,rgb,plus,minus,times,unit,dot,random,transform,point,direction}=Valley;
+  const {meshes:blenderMeshes}=Valley.blenderAssets;
   const wood=rgb(0xa7784f), darkWood=rgb(0x765139), paleWood=rgb(0xc49a70), brass=rgb(0xb29863);
   const ivory=rgb(0xe9e9df), porcelain=rgb(0xe9f0ed), silver=rgb(0xa8b6ba), dark=rgb(0x393b38);
   const holdTime=.48, lightLimit=10;
@@ -194,33 +195,14 @@
   }
 
   function bathroomFixtures(scene,a,lo,wall,front,level) {
-    const m=scene.material;
-    const toilet=fixture(scene,a,"ceramic",[lo+.48,level+.032,wall+.49],0,model(scene,part=>{
-      const ceramic=part(m.porcelain), metal=part(m.gloss);
-      ceramic.cylinder([0,.012,.020],[0,.28,.029],.157,.121,porcelain,22);
-      basin(ceramic,[0,0,.050],[[.22,.118,.145],[.33,.193,.24],[.44,.217,.273],[.485,.211,.263],
-        [.503,.196,.247],[.492,.152,.204],[.438,.139,.179],[.361,.080,.110],[.357,.001,.001]],porcelain);
-      ceramic.box([0,.627,-.211],[.43,.324,.173],porcelain,.043);
-      ceramic.box([0,.795,-.211],[.44,.038,.179],ivory,.013);
-      ceramic.ellipsoid([0,.639,-.139],[.185,.199,.024],ivory,[-.105,0,0],25,14);
-      metal.ellipsoid([.163,.765,-.104],[.026,.013,.018],silver,null,12,7);
-      part(m.gloss).ellipsoid([0,.368,.052],[.080,.006,.111],rgb(0x839ca1),null,18,8);
-    }));
+    const toilet=fixture(scene,a,"ceramic",[lo+.48,level+.032,wall+.49],0,
+      blenderMeshes(scene.renderer,"toilet",scene.material));
     toilet.hp=2.48;
     toilet.bounds=body(scene,toilet,[0,.414,-.008],[.438,.822,.629],"ceramic");
     connectPlumbing(scene,toilet,"toilet",[-.143,.218,-.266],[.91,5.05,1.54]);
 
-    const sink=fixture(scene,a,"ceramic",[lo+.48,level+.032,front-.346],Math.PI,model(scene,part=>{
-      const ceramic=part(m.porcelain), metal=part(m.gloss);
-      ceramic.cylinder([0,.021,0],[0,.70,-.025],.128,.111,porcelain,24);
-      ceramic.ellipsoid([0,.06,0],[.136,.064,.118],porcelain,null,18,9);
-      basin(ceramic,[0,0,0],[[.648,.098,.100],[.70,.218,.173],[.786,.282,.221],[.830,.276,.217],
-        [.848,.260,.203],[.844,.218,.158],[.805,.178,.125],[.747,.086,.069],[.739,.001,.001]],porcelain);
-      metal.cylinder([0,.740,.020],[0,.744,.020],.023,.022,silver,14);
-      metal.cylinder([0,.82,-.139],[0,.964,-.139],.027,.018,silver,14);
-      metal.cylinder([0,.961,-.139],[0,.943,-.029],.018,.016,silver,13);
-      metal.cylinder([0,.924,-.142],[.071,.930,-.142],.013,.012,silver,11);
-    }));
+    const sink=fixture(scene,a,"ceramic",[lo+.48,level+.032,front-.346],Math.PI,
+      blenderMeshes(scene.renderer,"bathroom_basin",scene.material));
     sink.hp=2.2;
     sink.bounds=body(scene,sink,[0,.428,-.002],[.568,.856,.456],"ceramic");
     body(scene,sink,[.027,.894,-.112],[.151,.145,.163],"ceramic");
@@ -228,7 +210,7 @@
   }
 
   function control(scene,a,kind,at,yaw,draw,on=false) {
-    const item=fixture(scene,a,kind,at,yaw,model(scene,draw));
+    const item=fixture(scene,a,kind,at,yaw,Array.isArray(draw) ? draw : model(scene,draw));
     item.on=on;
     item.value=Number(on);
     const center=kind==="light" ? point(item.matrix,[0,0,.044]) : item.at;
@@ -242,12 +224,7 @@
 
   function sink(scene,a,x,z,top) {
     const m=scene.material;
-    fixture(scene,a,"detail",[x,top,z],0,model(scene,part=>{
-      basin(part(m.gloss),[0,0,0],[[-.088,.040,.042],[-.078,.252,.145],[-.024,.343,.203],
-        [.021,.380,.221],[.032,.372,.214],[.029,.338,.186],[-.018,.286,.152],[-.071,.212,.108],
-        [-.076,.001,.001]],silver);
-      part(m.plain).cylinder([0,-.079,.013],[0,-.075,.013],.027,.027,dark,14);
-    }));
+    fixture(scene,a,"detail",[x,top,z],0,blenderMeshes(scene.renderer,"kitchen_sink",m));
     const tapAt=[x,top+.175,z-.18];
     a.beam(m.gloss,[x,top+.025,z-.188],tapAt,.026,.020,silver,13);
     a.beam(m.gloss,tapAt,[x,top+.172,z+.006],.018,.015,silver,13);
@@ -292,47 +269,22 @@
   }
 
   function gasRange(scene,a,x,z,top,back) {
-    const m=scene.material, enamel=rgb(0xd7d0b6), steel=rgb(0xb2bfc1), castIron=rgb(0x333635);
+    const m=scene.material;
     const front=z+.315, panelY=top+.097;
-    a.box(m.paint,[x,panelY,z+.011],[.732,.131,.582],enamel,{radius:.021,kind:"wall",hit:"metal"});
-    a.box(m.gloss,[x,top+.169,z+.010],[.757,.027,.610],steel,{radius:.009});
-    a.box(m.plain,[x,top+.037,z+.023],[.680,.018,.535],rgb(0x373732),{radius:.008});
-    a.box(m.plain,[x,panelY,front-.012],[.689,.110,.022],rgb(0x383b37),{radius:.010});
+    a.blender("range_body",[x,top,z]);
+    a.body([x,panelY,z+.011],[.732,.131,.582],"wall","metal");
     a.label("Rinnai","",[x,panelY,front],.675,.106,"range");
-    for(const side of [-1,1]) for(const end of [-1,1]) {
-      const at=[x+side*.307,top+.032,z+end*.239];
-      a.box(m.plain,at,[.051,.023,.050],castIron,{radius:.007});
-    }
-    for(let i=0;i<15;i++) {
-      const wear=.008*Math.sin(i*6.11);
-      a.box(m.gloss,[x-.340+i*.048,top+.156+wear*.12,front+.001],
-        [.023+Math.abs(wear),.0018,.0025],rgb(i%3===0 ? 0x76674b : 0xaaa288),{radius:.0004});
-    }
     const valveAt=[x+.24,top+.345,back+.06];
     a.beam(m.gloss,[valveAt[0],top+.101,valveAt[2]],[valveAt[0],top+.515,valveAt[2]],.014,.014,brass,10);
     const valve=control(scene,a,"valve",valveAt,0,part=>{
       part(m.gloss).cylinder([0,0,-.025],[0,0,.026],.028,.027,brass,12);
       part(m.gloss).box([0,0,.036],[.037,.106,.022],rgb(0xcc9a3d),.007);
     });
-    const effects=rangeEffects(scene);
+    const effects=rangeEffects(scene), knobs=blenderMeshes(scene.renderer,"range_knob",m);
     valve.burners=[-1,1].map(side=>{
       const u=x+side*.168, capZ=z-.021;
-      a.box(m.plain,[u,top+.187,capZ],[.290,.016,.296],castIron,{radius:.030});
-      a.beam(m.gloss,[u,top+.193,capZ],[u,top+.207,capZ],.102,.088,rgb(0x777b75),24);
-      a.beam(m.plain,[u,top+.207,capZ],[u,top+.224,capZ],.066,.063,castIron,24);
-      a.beam(m.gloss,[u,top+.224,capZ],[u,top+.228,capZ],.054,.047,rgb(0x595953),24);
-      for(let i=0;i<4;i++) {
-        const angle=Math.PI/4+i*Math.PI/2, dx=Math.cos(angle), dz=Math.sin(angle);
-        a.box(m.plain,[u+dx*.127,top+.216,capZ+dz*.127],[.027,.048,.041],castIron,{radius:.004,yaw:Math.PI/2-angle});
-        a.box(m.plain,[u+dx*.104,top+.237,capZ+dz*.104],[.031,.021,.085],castIron,{radius:.005,yaw:Math.PI/2-angle});
-      }
-      a.beam(m.porcelain,[u+.058,top+.197,capZ-.064],[u+.058,top+.224,capZ-.064],.008,.006,ivory,9);
-      const burner=control(scene,a,"burner",[u,panelY,front+.012],0,part=>{
-        part(m.plain).cylinder([0,0,-.010],[0,0,-.004],.046,.045,castIron,22);
-        part(m.paint).cylinder([0,0,-.004],[0,0,.024],.038,.034,ivory,24);
-        part(m.paint).box([0,0,.028],[.016,.059,.013],enamel,.006);
-        part(m.gloss).box([0,.022,.035],[.006,.013,.002],rgb(0x9b9078),.001);
-      });
+      a.blender("range_grate",[u,top,capZ]);
+      const burner=control(scene,a,"burner",[u,panelY,front+.012],0,knobs);
       burner.use=Valley.roadview.boxAt(point(burner.matrix,[0,0,.020]),[.106,.104,.089],burner.yaw);
       Object.assign(burner,{valve,side:side<0 ? "LEFT" : "RIGHT",press:0,effects,
         flameAt:a.at([u,top+.219,capZ]),sparkAt:a.at([u+.055,top+.220,capZ-.064])});

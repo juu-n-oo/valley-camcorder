@@ -1,12 +1,12 @@
 "use strict";
 
 (() => {
-  const { Builder, mix, rgb, random, plus, minus, times } = Valley;
+  const { Builder, mix, rgb, random, plus, minus, times, transform } = Valley;
   const { weir, waterLevel, offset, point, photoPoint, storeyHeight, mapScale } = Valley.roadLayout;
   const material={plain:0,rock:2,fabric:14,wood:13,gloss:15,paving:17,brick:18,plaster:19,tile:20,flow:21,asphalt:22,
     label:23,glass:24,paint:25,laminate:26,wallpaper:27,ceramicTile:28,porcelain:29,emissive:30,tapWater:31,frosted:32,
     cctv:33,lobbyPrint:34,bathFloor:35,diningFloor:36,scorch:37,scorchedBark:38,
-    carPaint:39,carMetal:40,carGlass:41,carWood:42,carLeather:43,carTire:44,carLens:45};
+    carPaint:39,carMetal:40,carGlass:41,carWood:42,carLeather:43,carTire:44,carLens:45,cardboard:46,steel:47,linen:14};
   const size=12;
   const key=(x,z)=>`${Math.floor(x/size)},${Math.floor(z/size)}`;
   const cream=rgb(0xb2afa0), cutStone=rgb(0x8c8d82);
@@ -56,6 +56,14 @@
       return {
         at,mesh,yaw,site,
         section(origin,turn=0) { return area(...at(origin),yaw+turn,site); },
+        blender(name,center,{scale=[1,1,1],turn=0,pitch=0,tint}={}) {
+          const matrix=transform(at(center),pitch,yaw+turn);
+          for(let axis=0;axis<3;axis++) for(let row=0;row<3;row++) matrix[axis*4+row]*=scale[axis];
+          for(const {slot,shape,material:mat} of Valley.blenderAssets.shapes(name,material)) {
+            Valley.blenderAssets.append(mesh(mat),shape,matrix,Array.isArray(tint) ? tint : tint?.[slot]);
+          }
+        },
+        body(center,dimensions,kind,hit=kind) { return collider(...at(center),dimensions,yaw,kind,hit); },
         box(mat,center,size,color,{yaw:turn=0,radius=0,kind,hit=mat===material.wood ? "wood" : kind,stair=0,stepBank}={}) {
           const p=at(center);
           mesh(mat).box(p,size,color,radius,yaw+turn ? [0,yaw+turn,0] : null);
@@ -138,9 +146,8 @@
           a.box(material.plaster,[0,.91,edge],[span,.146,.252],cream,{radius:.028});
           a.box(material.plaster,[0,.21,edge],[span,.155,.244],cutStone);
           for(let x=-span/2+.18;x<span/2;x+=.51) {
-            const t=times(cream,.81+rng()*.20);
-            a.box(material.plaster,[x,.54,edge],[.127,.58,.167],t,{radius:.013});
-            a.box(material.plaster,[x,.32,edge],[.165,.11,.203],t);
+            const tint=times([1,1,1],.87+rng()*.16);
+            a.blender("bridge_baluster",[x,.539,edge],{scale:[.165,.645,.202],tint});
           }
         }
       }

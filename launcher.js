@@ -2,6 +2,7 @@
 
 (() => {
   const { Builder, rgb, plus, minus, times, dot, cross, unit, mix, smooth, random, transform, multiply, point, direction } = Valley;
+  const {get,meshes,append,fingerPalette}=Valley.blenderAssets;
   const slot = .086;
   const muzzle = [0,.010,-.666];
   const switchZ = -.503;
@@ -21,83 +22,6 @@
   };
   const uncappedReload = {...reload,alignStart:1.63,align:1.86,insert:1.92,seat:2.22,end:2.56};
   const cartridgeFront = -.208, cartridgeBack = .222;
-  const carSpecs = [
-    { paint: 0xe4ddc6, roof: 0xf0e9d6, w: .039, l: .075, top: .036, cabin: .034, shift: .003 },
-    { paint: 0xebae38, roof: 0xf4bc49, w: .038, l: .069, top: .038, cabin: .039, shift: .001, round: true },
-    { paint: 0xb93d2c, roof: 0xc54934, w: .040, l: .078, top: .031, cabin: .038, shift: .003 },
-    { paint: 0xa8afad, roof: 0xc3c9c5, w: .039, l: .077, top: .034, cabin: .032, shift: .000 },
-    { paint: 0x60b7c5, roof: 0xdeeadf, w: .041, l: .078, top: .035, cabin: .032, shift: .005 },
-    { paint: 0xa93675, roof: 0xb34786, w: .040, l: .076, top: .033, cabin: .034, shift: .006, hoodBadge: true }
-  ];
-
-  function modelCar(renderer, s) {
-    const b = new Builder(), paint = rgb(s.paint), roof = rgb(s.roof);
-    const glass = rgb(0x304449), rubber = rgb(0x222525), chrome = rgb(0xc8cfca);
-    const w = s.w, l = s.l, t = s.top, r = s.round ? .007 : .004;
-    b.box([0,.009,0],[w*.93,.011,l*.94],rubber,.002);
-    b.box([0,.015,0],[w,.017,l],paint,r);
-    b.box([0,.021,-l*.313],[w*.91,.006,l*.32],paint,.002);
-    b.box([0,.020,l*.361],[w*.92,.005,l*.224],paint,.002);
-    const lowerX = w*.435, upperX = w*(s.round ? .305 : .353);
-    const z0 = s.shift-s.cabin*.58, z1 = s.shift+s.cabin*.58;
-    const z2 = s.shift-s.cabin*(s.round ? .23 : .30), z3 = s.shift+s.cabin*(s.round ? .27 : .37);
-    const low = .022, high = t-.0015;
-    const points = [
-      [-lowerX,low,z0],[lowerX,low,z0],[lowerX,low,z1],[-lowerX,low,z1],
-      [-upperX,high,z2],[upperX,high,z2],[upperX,high,z3],[-upperX,high,z3]
-    ];
-    const interpolate = (a,b,f) => a.map((v,i)=>mix(v,b[i],f));
-    for (let i=0; i<4; i++) {
-      const j = (i+1)%4;
-      const [a,c,d,e] = [points[i],points[j],points[j+4],points[i+4]];
-      const inset = (x,y) => plus(times(interpolate(a,c,x),1-y),times(interpolate(e,d,x),y));
-      b.quad([a,c,d,e],roof);
-      const n = unit([
-        i === 1 ? 1 : i === 3 ? -1 : 0,
-        .4,
-        i === 0 ? -1 : i === 2 ? 1 : 0
-      ]);
-      const window = (start,end,tint) => b.quad([
-        inset(start,.16),inset(end,.16),inset(end,.86),inset(start,.86)
-      ].map(p=>plus(p,times(n,.00038))),tint,n);
-      if (i%2 === 0) {
-        window(.11,.89,times(glass,i===0 ? 1.22 : 1.09));
-      } else {
-        window(.09,.46,glass);
-        window(.52,.91,times(glass,1.08));
-      }
-    }
-    b.box([0,high+.0008,(z2+z3)*.5],[upperX*2.04,.0034,z3-z2+.001],roof,.0016);
-    for (const z of [-l*.302,l*.303]) {
-      for (const side of [-1,1]) {
-        const axle = w*.43*side, outer = w*.544*side;
-        b.cylinder([axle,.0075,z],[outer,.0075,z],.0074,.0074,rubber,14);
-        b.cylinder([outer,.0075,z],[outer+.0006*side,.0075,z],.0045,.0043,chrome,12);
-        b.cylinder([outer+.0006*side,.0075,z],[outer+.00085*side,.0075,z],.0026,.0024,rgb(0x697371),10);
-      }
-    }
-    for (const side of [-1,1]) {
-      const x = side*w*.324;
-      if (s.round) {
-        b.ellipsoid([x,.016,-l*.471],[.004,.0042,.002],chrome,null,10,6);
-        b.ellipsoid([x,.016,-l*.488],[.0028,.003,.0014],rgb(0xf5efd3),null,10,6);
-      } else {
-        b.box([x,.017,-l*.503],[.0082,.0047,.0013],rgb(0xf5ead0),.0006);
-      }
-      b.box([x,.014,l*.503],[.0075,.0037,.0014],rgb(0x813120),.0005);
-      b.box([side*w*.504,.018,.009],[.0009,.0012,.0042],chrome,.0002);
-    }
-    b.box([0,.008,-l*.513],[w*.99,.0024,.0033],chrome,.0007);
-    b.box([0,.008,l*.513],[w*.99,.0024,.0033],chrome,.0007);
-    b.box([0,.015,-l*.506],[w*.43,.0042,.001],rgb(0x333c38));
-    b.box([0,.013,l*.511],[w*.20,.0034,.001],rgb(0xe0d9c5));
-    if(s.hoodBadge) {
-      b.cylinder([0,.023,-l*.305],[0,.025,-l*.305],.008,.007,rubber,14);
-      b.cylinder([0,.025,-l*.305],[0,.026,-l*.305],.005,.0048,chrome,14);
-    }
-    return renderer.mesh(b);
-  }
-
   function tube(builder, rings, tone, resolution = 14) {
     const control = rings.map(([p,w,d,s])=>[...p,w,d,s]);
     const curve = [];
@@ -143,33 +67,7 @@
   const leftCuff={at:[-.143,-.066,.098],axis:unit([.023,.031,-.022])};
 
   function sleeveMesh(renderer) {
-    const b=new Builder(), count=24;
-    const fabric=rgb(0x576c7b), band=rgb(0x3d5262);
-    const profile=[
-      [0,.132,.108],[.17,.122,.104],[.36,.103,.090],[.51,.095,.082],
-      [.62,.099,.085],[.73,.088,.074],[.82,.073,.062],[.90,.057,.049],
-      [.944,.046,.040],[.955,.047,.041],[.969,.048,.042],[.985,.047,.040],[1,.042,.036]
-    ];
-    const rows=[];
-    for(let i=1;i<profile.length;i++) {
-      const [t0,w0,d0]=profile[i-1], [t1,w1,d1]=profile[i], steps=Math.max(1,Math.ceil((t1-t0)*29));
-      for(let j=0;j<steps;j++) {
-        const f=j/steps, blend=smooth(0,1,f);
-        rows.push([mix(t0,t1,f),mix(w0,w1,blend),mix(d0,d1,blend)]);
-      }
-    }
-    rows.push(profile.at(-1));
-    for(const [i,[t,w,d]] of rows.entries()) for(let j=0;j<=count;j++) {
-      const u=j/count, a=u*Math.PI*2, x=Math.cos(a), y=Math.sin(a);
-      const fold=1+.037*Math.sin(87*t+2.4*x)*(smooth(.65,.84,t)-smooth(.91,.947,t))+.021*Math.cos(a*3.0+1.2*t);
-      const tone=times(t>=.955 ? band : fabric,.95+.062*y+.039*Math.sin(a*2+t*18));
-      b.vertex([w*x*fold,d*y*fold,t],unit([x/w,y/d,0]),[u,t],tone);
-      if(i && j) {
-        const z=i*(count+1)+j;
-        b.indices.push(z-count-2,z-count-1,z,z-count-2,z,z-1);
-      }
-    }
-    return renderer.mesh(b,16);
+    return meshes(renderer,"sleeve")[0];
   }
 
   function forearm(opaque,mesh,matrix,cuff,side,wristLead=.247,elbowOut=0,ik) {
@@ -205,130 +103,8 @@
     }
   }
 
-  // Blend the palm, wrist and fingers into one surface for the fixed grip.
-  function gripSurface(paths, skin) {
-    const origin=[-.083,-.303,-.027], step=.0036, size=[64,75,60];
-    const stride=[1,size[0],size[0]*size[1]];
-    const field=new Float32Array(stride[2]*size[2]).fill(.04), part=new Float32Array(field.length);
-    for(const [rings,blend] of paths) {
-      part.fill(.04);
-      for(let i=1;i<rings.length;i++) {
-        const [a,w0,d0]=rings[i-1], [b,w1,d1]=rings[i];
-        const delta=minus(b,a), length=Math.hypot(...delta), axis=times(delta,1/length);
-        const side=unit([axis[2],0,-axis[0]]), up=cross(axis,side);
-        const reach=Math.max(w0,w1,d0,d1)+blend;
-        const lo=origin.map((v,k)=>Math.max(0,Math.floor((Math.min(a[k],b[k])-v-reach)/step)));
-        const hi=origin.map((v,k)=>Math.min(size[k]-1,Math.ceil((Math.max(a[k],b[k])-v+reach)/step)));
-        for(let z=lo[2];z<=hi[2];z++) for(let y=lo[1];y<=hi[1];y++) {
-          const dz=origin[2]+z*step-a[2], dy=origin[1]+y*step-a[1];
-          const row=z*stride[2]+y*stride[1];
-          for(let x=lo[0];x<=hi[0];x++) {
-            const dx=origin[0]+x*step-a[0];
-            const along=axis[0]*dx+axis[1]*dy+axis[2]*dz;
-            const across=side[0]*dx+side[2]*dz;
-            const normal=up[0]*dx+up[1]*dy+up[2]*dz;
-            const t=Math.max(0,Math.min(1,along/length)), cap=along-length*t;
-            const width=mix(w0,w1,t), depth=mix(d0,d1,t);
-            const d=Math.sqrt(across*across+cap*cap+(normal*width/depth)**2)-width;
-            part[row+x]=Math.min(part[row+x],d);
-          }
-        }
-      }
-      for(let i=0;i<field.length;i++) {
-        const a=field[i], b=part[i], fold=Math.max(0,1-Math.abs(a-b)/blend);
-        field[i]=Math.min(a,b)-blend*.25*fold*fold;
-      }
-    }
-
-    const hand=new Builder(), cells=new Int32Array(field.length).fill(-1);
-    const corners=Array.from({length:8},(_,i)=>[i&1,(i>>1)&1,i>>2]);
-    const offset=corners.map(c=>dot(c,stride));
-    const edges=[];
-    for(let axis=0;axis<3;axis++) for(let c=0;c<8;c++) {
-      if(!(c&(1<<axis))) edges.push([c,c|(1<<axis)]);
-    }
-    const values=new Float32Array(8);
-    for(let z=0;z<size[2]-1;z++) for(let y=0;y<size[1]-1;y++) for(let x=0;x<size[0]-1;x++) {
-      const index=x+y*stride[1]+z*stride[2], inside=field[index]<0;
-      let crossed=false;
-      for(let c=0;c<8;c++) {
-        values[c]=field[index+offset[c]];
-        crossed ||= (values[c]<0)!==inside;
-      }
-      if(!crossed) continue;
-      const center=[0,0,0], cell=[x,y,z];
-      let crossings=0;
-      for(const [a,b] of edges) {
-        if((values[a]<0)===(values[b]<0)) continue;
-        const t=values[a]/(values[a]-values[b]);
-        for(let k=0;k<3;k++) center[k]+=mix(corners[a][k],corners[b][k],t);
-        crossings++;
-      }
-      const [u,v,w]=times(center,1/crossings);
-      const normal=unit([
-        mix(mix(values[1]-values[0],values[3]-values[2],v),mix(values[5]-values[4],values[7]-values[6],v),w),
-        mix(mix(values[2]-values[0],values[3]-values[1],u),mix(values[6]-values[4],values[7]-values[5],u),w),
-        mix(mix(values[4]-values[0],values[5]-values[1],u),mix(values[6]-values[2],values[7]-values[3],u),v)
-      ]);
-      const p=origin.map((o,k)=>o+(cell[k]+[u,v,w][k])*step);
-      const uv=[.5+Math.atan2(normal[2],normal[0])/(2*Math.PI),(p[1]-origin[1])*1.75];
-      const tip=smooth(-.20,-.076,p[1])*(1-smooth(-.029,.072,p[0]));
-      const color=[skin[0]*(.99+.055*tip),skin[1]*(.99-.035*tip),skin[2]*(.99-.044*tip)];
-      const here=cells[index]=hand.vertex(p,normal,uv,color);
-      for(let axis=0;axis<3;axis++) {
-        const a=(axis+1)%3,b=(axis+2)%3;
-        if(!cell[a] || !cell[b] || (values[1<<axis]<0)===inside) continue;
-        const side=cells[index-stride[a]], diagonal=cells[index-stride[a]-stride[b]], end=cells[index-stride[b]];
-        if(inside) hand.indices.push(here,side,diagonal,here,diagonal,end);
-        else hand.indices.push(here,end,diagonal,here,diagonal,side);
-      }
-    }
-    return hand;
-  }
-
-  function gripHand(renderer,firstFinger=0) {
-    const nail = new Builder(), paths=[];
-    const skin = rgb(0xcd9b83), nailTone = rgb(0xdab0a3);
-    paths.push([[
-      [[.068,-.242,.129],.034,.029],
-      [[.060,-.222,.120],.034,.028],
-      [[.049,-.191,.106],.039,.030],
-      [[.049,-.159,.099],.044,.033],
-      [[.048,-.128,.090],.039,.030],
-      [[.040,-.104,.078],.027,.023],
-      [[.030,-.092,.065],.014,.013]
-    ],.009]);
-    for (let i=firstFinger; i<4; i++) {
-      const y=[-.103,-.130,-.156,-.181][i], z=[.002,.007,.013,.019][i];
-      const radius=[.0126,.0132,.0121,.0103][i], left=[-.054,-.057,-.054,-.050][i];
-      paths.push([[
-        [[.061,y+.008,.084+i*.004],radius*.88,radius*.95],
-        [[.045,y+.001,.048+i*.003],radius,radius],
-        [[.024,y-.003,z+.015],radius*.95,radius],
-        [[-.005,y-.006,z-.004],radius*.93,radius*.95],
-        [[-.034,y-.004,z+.004],radius*.97,radius*.91],
-        [[left+.006,y+.001,z+.024],radius*.89,radius*.85],
-        [[left,y+.002,z+.037],radius*.77,radius*.82],
-        [[left+.003,y,z+.048],radius*.70,radius*.75],
-        [[left+.010,y-.004,z+.057],radius*.36,radius*.45]
-      ],.006]);
-      nailPlate(nail,[left-radius*.65,y+.001,z+.047],[.30,-.18,.93],[-.96,.23,.08],
-        radius*1.31,radius*.98,nailTone);
-    }
-    paths.push([[
-      [[.072,-.157,.117],.024,.023],
-      [[.063,-.131,.127],.022,.020],
-      [[.046,-.109,.129],.019,.017],
-      [[.028,-.093,.126],.016,.015],
-      [[.010,-.088,.122],.0133,.0125],
-      [[-.005,-.088,.115],.013,.0122],
-      [[-.019,-.089,.109],.0115,.0106],
-      [[-.029,-.093,.104],.0082,.0087],
-      [[-.036,-.096,.101],.0033,.0038]
-    ],.017]);
-    nailPlate(nail,[-.024,-.083,.116],[-.85,-.18,-.49],[-.13,.44,.89],.0178,.014,nailTone);
-    const hand=gripSurface(paths,skin);
-    return [renderer.mesh(hand,7),renderer.mesh(nail,15)];
+  function gripHand(renderer) {
+    return meshes(renderer,"right_grip");
   }
 
   function makeDigit(renderer,rings,nail) {
@@ -339,47 +115,11 @@
   }
 
   function supportHand(renderer,sleeve) {
-    const palm = new Builder();
-    const skin = rgb(0xcd9b83), nail = rgb(0xdcb1a4);
-    tube(palm,[
-      [[-.169,-.098,.122],.033,.028,1.035],
-      [[-.144,-.070,.103],.034,.028,.985],
-      [[-.119,-.033,.072],.046,.037,1.02],
-      [[-.102,.009,.044],.052,.033,1.03],
-      [[-.091,.042,.036],.041,.026,1.01],
-      [[-.085,.056,.034],.028,.018,.99],
-      [[-.080,.060,.029],.004,.004,.97]
-    ],skin,28);
-    const fingers = [];
-    for (let i=0; i<4; i++) {
-      const finger = new Builder();
-      const length = [.085,.096,.090,.072][i];
-      const radius = [.0103,.0115,.0107,.0086][i];
-      const z = (i-1.5)*.0185;
-      const root = [-.084,.055,.037+z];
-      tube(finger,[
-        [[0,0,0],radius*.88,radius*.86,1],
-        [[length*.25,.020,z*.03],radius,radius*.94,1.03],
-        [[length*.45,.023,z*.10],radius*.97,radius*.88,.97],
-        [[length*.56,.021,z*.12],radius*.94,radius*.89,1.04],
-        [[length*.72,.018,z*.16],radius*.85,radius*.77,.984],
-        [[length*.81,.014,z*.17],radius*.83,radius*.81,1.04],
-        [[length*.94,.009,z*.18],radius*.67,radius*.61,1.03],
-        [[length,.006,z*.18],.002,.002,1.02]
-      ],skin,21);
-      nailPlate(finger,[length*.868,.0175,z*.18],[.93,-.38,0],[.10,1,.06],
-        length*.18,radius*1.13,nail);
-      fingers.push({root,tip:[length,.006,z*.18],mesh:renderer.mesh(finger,7)});
-    }
-    const thumb=makeDigit(renderer,[
-      [[-.007,.009,.002],.004,.004,.99],
-      [[.004,-.005,-.001],.015,.014,1],
-      [[.014,-.018,-.004],.016,.014,1.01],
-      [[.032,-.027,-.018],.013,.011,1.03],
-      [[.047,-.025,-.028],.010,.009,1.02],
-      [[.053,-.022,-.032],.002,.002,1]
-    ],[[.044,-.0167,-.026],[.83,.14,-.52],[0,1,.13],.013,.0118]);
-    return {palm:renderer.mesh(palm,7),sleeve,fingers,thumb};
+    const fingers=[.085,.096,.090,.072].map((length,i)=>{
+      const z=(i-1.5)*.0185, name="finger_"+i;
+      return {root:[-.084,.055,.037+z],tip:[length,.006,z*.18],mesh:meshes(renderer,name)[0],pivots:get(name).pivots};
+    });
+    return {palm:meshes(renderer,"open_palm")[0],sleeve,fingers,thumb:meshes(renderer,"thumb")[0]};
   }
 
   function shell(renderer) {
@@ -388,10 +128,8 @@
     const yellow = rgb(0xe1b538), orange = rgb(0xec8b41), black = rgb(0x262c2a);
     body.box([0,-.057,-.223],[.149,.027,.497],green,.006);
     body.box([0,-.047,-.221],[.125,.005,.449],edge,.002);
-    body.box([0,.019,.072],[.150,.135,.112],green,.010);
+    append(body,get("green_toy_cover").parts[0].shape,transform([0,0,0]));
     body.box([0,-.051,.061],[.088,.027,.091],green,.005);
-    body.box([0,.086,.071],[.106,.003,.066],greenDark,.0015);
-    body.box([0,.087,.071],[.099,.0034,.061],edge,.0014);
     body.box([0,.080,-.535],[.149,.059,.211],green,.014);
     body.box([0,.071,-.455],[.144,.040,.052],green,.013);
     body.box([0,-.032,-.539],[.151,.043,.244],green,.007);
@@ -525,8 +263,8 @@
       [[.006,-.076,-.042],.003,.003,1]
     ],[[.012,-.067,-.042],[-.86,-.12,-.43],[.16,.98,0],.012,.010]);
     return {
-      ...shell(renderer), cartridge:cartridge(renderer), hand:gripHand(renderer,1), triggerFinger, sleeve,
-      support:supportHand(renderer,sleeve), cars:carSpecs.map(s=>modelCar(renderer,s))
+      ...shell(renderer), cartridge:cartridge(renderer), hand:gripHand(renderer), triggerFinger, sleeve,
+      support:supportHand(renderer,sleeve), cars:Array.from({length:6},(_,i)=>meshes(renderer,"minicar_"+i)[0])
     };
   }
 
@@ -629,10 +367,12 @@
     opaque.push({mesh:hand.palm,matrix,handSide:side});
     forearm(opaque,hand.sleeve,matrix,leftCuff,side,wristLead,0,ik);
     const open = 1-grip;
-    for (const [i,{mesh,root}] of hand.fingers.entries()) {
-      const spread=pointing && i===0 ? 0 : open;
-      const flex=pointing && i===0 ? 0 : curl*(.85+i*.068);
-      opaque.push({mesh,handSide:side,matrix:multiply(matrix,transform(root,0,spread*(i-1.5)*.077,spread*.66-flex-(i===0 ? 0 : pinch*.64)))});
+    for (const [i,{mesh,root,pivots}] of hand.fingers.entries()) {
+      const pointingIndex=pointing && i===0;
+      const spread=pointingIndex ? 0 : open, flex=pointingIndex ? 0 : curl*(.85+i*.068);
+      const bend=pointingIndex ? 0 : .23*grip+.48*flex+(i ? .22*pinch : 0);
+      opaque.push({mesh,handSide:side,palette:pivots ? fingerPalette(pivots,bend) : undefined,
+        matrix:multiply(matrix,transform(root,0,spread*(i-1.5)*.077,spread*.66-flex-(i===0 ? 0 : pinch*.64)))});
     }
     opaque.push(thumb ? {...thumb,handSide:side} : {mesh:hand.thumb,handSide:side,matrix:multiply(matrix,transform(
       [-.118+.035*pry-.022*flick+.025*pinch+.025*curl,-.022+.024*pry+.054*flick+.027*pinch+.011*curl,

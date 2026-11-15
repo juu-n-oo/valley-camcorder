@@ -33,26 +33,16 @@
 
   function buildSupplyCrate(renderer,area,m) {
     const width=.92, depth=.65, height=.60, board=.012;
-    const kraft=rgb(0xc29762), sideKraft=rgb(0xb98d59);
     const box=area(supply.x,supply.y,supply.z);
-    const wall={kind:"wall"};
+    box.blender("supply_carton",[0,0,0]);
     for(const side of [-1,1]) {
-      box.box(m.plaster,[0,height/2,side*(depth-board)/2],[width,height,board],kraft,wall);
-      box.box(m.plaster,[side*(width-board)/2,height/2,0],[board,height,depth-2*board],sideKraft,wall);
+      box.body([0,height/2,side*(depth-board)/2],[width,height,board],"wall");
+      box.body([side*(width-board)/2,height/2,0],[board,height,depth-2*board],"wall");
     }
-    box.box(m.plaster,[0,board,0],[width-2*board,board,depth-2*board],rgb(0x9c7045));
-    box.box(m.plain,[0,board*1.5+.001,0],[width-2*board,.002,.005],rgb(0x815b36));
-    box.box(m.plaster,[-width/2+.026,height/2,depth/2+.001],[.014,height,.002],sideKraft);
     box.done();
 
-    function flap(span,length,taped) {
-      const mesh=new Builder();
-      mesh.box([0,0,length/2],[span,board,length],rgb(0xcaa471),.0015);
-      if(taped) mesh.box([0,board/2+.001,length-.015],[span-.006,.002,.03],rgb(0xe5d1a7));
-      return renderer.mesh(mesh,m.plaster);
-    }
-    const outer=flap(width-.008,depth/2-.004,true);
-    const inner=flap(depth-2*board-.008,.29,false);
+    const {meshes}=Valley.blenderAssets;
+    const [outer]=meshes(renderer,"carton_flap_outer",m), [inner]=meshes(renderer,"carton_flap_inner",m);
     const {x,y,z}=supply, lower=y+height+board*.56, upper=lower+board+.003;
     return {open:0,flaps:[
       {mesh:outer,at:[x,upper,z-depth/2],yaw:0,outer:true,angle:Math.PI+.27},

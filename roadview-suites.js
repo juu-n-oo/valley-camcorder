@@ -94,8 +94,7 @@
     const duvet=rgb(variant ? 0x8994a1 : 0xa48581);
     a.box(m.wood,[x,.070,z],[1.33,.14,1.98],oak,{radius:.023,kind:"wood"});
     a.box(m.fabric,[x,.181,z],[1.29,.124,1.94],white,{radius:.047});
-    a.box(m.fabric,[x,.248,z-.24],[1.295,.085,1.38],duvet,{radius:.029});
-    a.box(m.fabric,[x,.286,z+.654],[.983,.137,.352],rgb(0xe7ded0),{radius:.060});
+    a.blender("guest_quilt",[x,0,z],{tint:{fabric:duvet}});
     const fabric=[duvet,rgb(0xc3a371),rgb(0xa98d88),rgb(0xb9b4a8)];
     for(let i=0;i<4;i++) a.box(m.fabric,[lo+.413,.050+i*.066,depth-.38],[.668-i*.026,.078,.48-i*.021],
       fabric[i],{radius:.027});
@@ -120,10 +119,8 @@
       tv.box(m.wood,[0,y,.232],[.738,.183,.034],oak,{radius:.012});
       tv.box(m.gloss,[0,y+.015,.255],[.137,.025,.015],steel,{radius:.008});
     }
-    tv.box(m.plain,[0,.746,-.022],[.665,.425,.421],rgb(0x686966),{radius:.069,kind:"wall"});
-    tv.box(m.gloss,[0,.764,.185],[.530,.306,.053],rgb(0x333e40),{radius:.049});
-    tv.box(m.paint,[0,.583,.190],[.491,.040,.027],steel,{radius:.009});
-    tv.oval(m.plain,[.218,.576,.209],[.010,.009,.007],rgb(0x9d503c));
+    tv.blender("room_crt",[0,.506,0]);
+    tv.body([0,.746,-.022],[.665,.425,.421],"wall");
     tv.done();
   }
 

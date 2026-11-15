@@ -125,8 +125,8 @@
   function build(renderer) {
     const body=new Builder(), socket=new Builder(), slide=new Builder(), trigger=new Builder(), boost=new Builder();
     const coupling=new Builder();
-    body.box([0,.048,-.121],[.152,.109,.423],charcoal,.006,null,4);
-    body.box([0,.106,-.213],[.151,.026,.239],cover,.0045);
+    const {get,append}=Valley.blenderAssets;
+    append(body,get("charcoal_toy_cover").parts[0].shape,transform([0,0,0]));
     body.box([0,.050,-.458],[.138,.099,.292],charcoal,.0045);
     body.box([0,-.007,-.538],[.146,.074,.320],charcoal,.005);
     body.box([0,-.041,-.534],[.132,.011,.302],dark,.003);

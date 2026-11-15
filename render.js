@@ -601,6 +601,18 @@ globalThis.Valley = (() => {
         c += vec3(.087,.029,.020)*(flush-.43)+vec3(.126,.102,.084)*sheen;
         c += vec3(.072,.025,.013)*rim*(.34+.66*wrapped);
         c = mix(c,c*vec3(.91,.99,.99),vein*.46);
+      } else if (uMaterial == 46) {
+        float pulp = noise(vLocal.xz*179.0+vLocal.y*130.0);
+        float grain = noise(vLocal.xz*vec2(36.0,221.0)+vLocal.y*195.0);
+        float age = noise(vLocal.xz*8.3+vLocal.y*11.6);
+        c *= (.57+diffuse*.43+.17*max(n.y,0.0))*(.83+.12*pulp+.09*grain+.045*age);
+      } else if (uMaterial == 47) {
+        vec3 halfAngle = normalize(light+toward);
+        float polish = pow(max(dot(n,halfAngle),0.0),42.0);
+        float brushed = noise(vec2(vUV.x*32.0,vUV.y*1180.0));
+        float fresnel = pow(1.0-abs(dot(n,toward)),3.5);
+        c = c*(.59+.37*diffuse+.12*max(n.y,0.0))*(.94+.11*brushed);
+        c += vec3(.30,.32,.33)*(polish*.54+.25*fresnel);
       } else if (uMaterial == 15) {
         float gloss = pow(max(0.0,dot(n,normalize(light+toward))),51.0);
         c *= .69+.36*diffuse;
@@ -1094,6 +1106,8 @@ globalThis.Valley = (() => {
       float luma = dot(signal,weights);
       float contrast = mix(luma,smoothstep(.050,.914,luma),.37);
       vec3 c = vec3(contrast)+(colors-dot(colors,weights))*.86;
+      float nearbyLight = dot(vertical*.60+(left+right)*.20,weights);
+      c += vec3(.118,.105,.082)*max(nearbyLight-luma,0.0)*smoothstep(.69,.98,nearbyLight);
       c.r += (right.r-left.r)*.073;
       c.b -= (right.b-left.b)*.077;
       c *= vec3(1.015,1.009,.998);
@@ -1438,15 +1452,15 @@ globalThis.Valley = (() => {
       if(deformation) gl.disableVertexAttribArray(4);
     }
 
-    drawCharacters(parts) {
+    drawParts(parts) {
       if(!parts?.length) return;
       const {gl}=this;
       let skinned=false, lastPalette;
-      for(const {mesh,matrix,effect,palette} of parts) {
+      for(const {mesh,matrix,belt,effect,palette} of parts) {
         if(!mesh.joints) {
           if(skinned) this.use("mesh");
           skinned=false;
-          this.draw(mesh,matrix,0,effect);
+          this.draw(mesh,matrix,belt,effect);
           continue;
         }
         if(palette?.length!==mesh.joints*16) throw new Error("The joint palette does not match the mesh.");
@@ -1467,7 +1481,7 @@ globalThis.Valley = (() => {
           gl.bufferSubData(gl.UNIFORM_BUFFER,0,palette);
           lastPalette=palette;
         }
-        this.draw(mesh,matrix,0,effect,this.programs.skinned.uniforms);
+        this.draw(mesh,matrix,belt,effect,this.programs.skinned.uniforms);
       }
       if(skinned) this.use("mesh");
     }
@@ -1629,11 +1643,9 @@ globalThis.Valley = (() => {
       for (const {mesh,matrix,effect} of props) this.draw(mesh,matrix,0,effect);
       for (const {mesh,matrix,effect} of interior.opaque) this.draw(mesh,matrix,0,effect);
       for (const { mesh, matrix, belt } of objects) this.draw(mesh,matrix,belt);
-      this.drawCharacters(characters);
+      this.drawParts(characters);
       // Interaction meshes share the world's depth buffer all the way to the grip point.
-      if(interaction?.length) {
-        for(const {mesh,matrix,effect} of interaction) this.draw(mesh,matrix,0,effect);
-      }
+      this.drawParts(interaction);
 
       gl.enable(gl.BLEND);
       gl.depthMask(false);
@@ -1666,7 +1678,7 @@ globalThis.Valley = (() => {
       gl.disable(gl.BLEND);
       gl.clear(gl.DEPTH_BUFFER_BIT);
       this.beginMeshes(camera.projection, [0,0,0], time, false, true, submerged);
-      for (const { mesh, matrix, belt, effect } of held.opaque) this.draw(mesh,matrix,belt,effect);
+      this.drawParts(held.opaque);
       gl.enable(gl.BLEND);
       gl.depthMask(false);
       if (held.glass) this.draw(held.glass.mesh,held.glass.matrix);

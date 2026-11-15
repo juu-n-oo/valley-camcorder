@@ -185,27 +185,29 @@
     return meshes;
   }
 
-  const profile = [[-.70,-1],[.61,-1],[1,-.63],[1,.49],[.58,1],[-.62,1],[-1,.55],[-1,-.60]];
   function boulder(builder, rng, at, dims, angle, color, shear = .12, colliders) {
-    const first = builder.indices.length;
-    const [x,y,z] = at, [rx,ry,rz] = dims;
+    const [rx,ry,rz] = dims;
+    const choice=rng(), tilt=(rng()-.5)*.19;
+    // Preserve the terrain generator's seeded placements when swapping the mesh.
+    for(let i=0;i<55;i++) rng();
+    const variety=ry<Math.min(rx,rz)*.59 && choice<.64 ? "river" : ["ledge","weathered","cleft"][Math.floor(choice*3)];
+    const name="granite_"+variety;
     const co = Math.cos(angle), si = Math.sin(angle);
-    const footprint = profile.map(([u,v]) => [u*(.91+rng()*.19),v*(.89+rng()*.24)]);
-    const tilt = (rng()-.5)*.19;
-    const rings = [[-1,.71],[-.73,1],[.67,.94],[1,.73]].map(([yy,size]) => footprint.map(([u,v]) => {
-      const f = (u*size+yy*shear)*rx, g = (v*size+yy*.055)*rz;
-      return [x+f*co-g*si, y+ry*(yy+u*tilt+(rng()-.5)*.18), z+f*si+g*co];
-    }));
-    for (let k = 0; k < 8; k++) {
-      const next = (k+1)%8;
-      const facet = .88+rng()*.22;
-      for (let j = 0; j < 3; j++) {
-        const tint = times(color,facet*(j===0 ? .81 : 1));
-        builder.quad([rings[j][k],rings[j+1][k],rings[j+1][next],rings[j][next]],tint);
-      }
-      builder.triangle([x+rx*shear*co,y+ry*1.03,z+rx*shear*si],rings[3][next],rings[3][k],color);
-    }
-    if (colliders) colliders.push(meshCollider(builder,first));
+    const matrix=[rx*co,ry*tilt,rx*si,0, rx*shear*co-rz*.055*si,ry,rx*shear*si+rz*.055*co,0,
+      -rz*si,0,rz*co,0,...at,1];
+    stampStone(builder,name,matrix,color,colliders,Math.max(rx,rz)<.44);
+  }
+
+  function stampStone(builder,name,matrix,color,colliders,small=false) {
+    const {get,append}=Valley.blenderAssets;
+    const proxy=name+"_collision";
+    append(builder,get(small ? proxy : name).parts[0].shape,matrix,color);
+    if(!colliders) return null;
+    const simplified=new Builder();
+    append(simplified,get(proxy).parts[0].shape,matrix);
+    const collision=meshCollider(simplified,0);
+    colliders.push(collision);
+    return collision;
   }
 
   function meshCollider(builder, first, offsets) {
@@ -241,7 +243,7 @@
       [-29,8.1,3.6,4.6,15.4], [-22,7.3,3.9,3.7,11.0]
     ];
     const ledges = [];
-    for (const [station,offset,rx,rz,peak] of pillars) {
+    for(const [pick,[station,offset,rx,rz,peak]] of pillars.entries()) {
       const z=station*mapScale;
       const x = center(z)+width(z)+offset, base = -.38;
       const {stone}=tileAt(x,z);
@@ -249,16 +251,18 @@
       const rotation = (rng()-.5)*1.05;
       let y = base;
       for (let i = 0; i < count; i++) {
-        const v = i/(count-1);
         const layer = (peak/count)*(.69 + rng()*.64);
-        const taper = 1.0 - v*.31;
-        const color = palette[Math.floor(rng()*palette.length)];
-        boulder(stone,rng,[x+v*rx*.31+(rng()-.5)*.35,y+layer*.5,z+(rng()-.5)*.32],
-          [rx*taper,layer*.53,rz*taper],rotation+(rng()-.5)*.17,color,(rng()-.43)*.22,colliders);
+        for(let sample=0;sample<62;sample++) rng();
         y += layer*.963;
       }
+      const half=(y-base)*.5,s=Math.sin(rotation),c=Math.cos(rotation);
+      const matrix=[rx*c,0,rx*s,0,0,half,0,0,-rz*s,0,rz*c,0,x,base+half,z,1];
+      const tint=pick%3===0 ? [1.16,1.10,1.03] : pick%3===1 ? [1.12,1.12,1.08] : [1.07,1.10,1.09];
+      const collision=stampStone(stone,"cliff_face_"+pick%3,matrix,tint,colliders);
+      const tx=x+rx*.1, start=collision.max[1]+1, end=collision.min[1]-.1;
+      const safeTop=meshHit([collision],[tx,start,z],[tx,end,z],[0,end-start,0],1,"rock")?.at[1]??y;
       blocks.push({ x,z,rx:rx*.91,rz:rz*.93,top:y });
-      ledges.push([x+rx*.13,y-.23,z,rx]);
+      ledges.push([tx,safeTop-.13,z,rx]);
     }
     const near = [
       [-1,15,6.4,1.38,.65,1.07], [-1,11,2.1,1.07,.43,.79], [-1,-6,1.1,1.59,.74,1.23],

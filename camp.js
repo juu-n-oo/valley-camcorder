@@ -175,42 +175,7 @@
   }
 
   function duffelBag() {
-    const model=parts(fabric,metal), [{shape:cloth},{shape:zipper}]=model;
-    const canvas=rgb(0x46574f), end=rgb(0x33443e), webbing=rgb(0x242c29), ochre=rgb(0xd3ae62);
-    function shell(u,v,lift=0) {
-      const a=v*TAU, taper=.38+.62*Math.sin(Math.PI*u)**.38;
-      const folds=1+.024*Math.sin(a*5+u*19)+.019*Math.cos(a*9-u*16);
-      return [mix(-.49,.49,u),Math.max(.014,.161+(.184*taper*folds+lift)*Math.cos(a)),
-        (.252*taper*folds+lift)*Math.sin(a)];
-    }
-    surface(cloth,36,30,(u,v)=>shell(u,v),(u,v)=>times(canvas,.89+.15*Math.cos(v*TAU)+.05*Math.sin(u*31)), -1,[2.45,2.0]);
-    for(const u of [0,1]) {
-      surface(cloth,26,5,(v,t)=>{
-        const edge=shell(u,v);
-        return [edge[0]+(u===0 ? -1 : 1)*.039*(1-t*t),mix(.16,edge[1],t),edge[2]*t];
-      },end,u===0 ? -1 : 1,[1.4,1.2]);
-    }
-    for(const u of [.095,.905]) line(cloth,v=>shell(u,v,.003),31,.0044,end);
-    for(const u of [.274,.727]) {
-      surface(cloth,4,30,(x,v)=>shell(u+(x-.5)*.051,v,.006),webbing,-1,[.21,2.1]);
-      for(const side of [-1,1]) line(cloth,v=>shell(u+side*.022,v,.007),29,.0013,times(canvas,.82));
-    }
-    for(const side of [-1,1]) {
-      const loop=t=>[mix(-.224,.223,t),.322+.110*Math.sin(t*Math.PI),side*(.126-.064*Math.sin(t*Math.PI))];
-      line(cloth,loop,24,.013,webbing);
-      line(cloth,t=>loop(mix(.36,.64,t)),8,.019,times(webbing,1.17));
-    }
-    line(cloth,t=>shell(mix(.05,.95,t),.026,.007),35,.012,end);
-    for(let i=0;i<36;i++) {
-      const p=shell(mix(.066,.934,i/35),.026,.014);
-      zipper.box(p,[.013,.003,.013],rgb(i%2 ? 0xa89b77 : 0xc1b490),.0008);
-    }
-    const slide=shell(.82,.026,.019);
-    zipper.box(slide,[.040,.009,.023],rgb(0xaaa38a),.002);
-    cloth.box([slide[0]+.038,slide[1]-.001,slide[2]+.008],[.059,.010,.021],ochre,.003,[0,-.19,0]);
-    surface(cloth,8,5,(u,v)=>shell(mix(.365,.632,u),mix(.159,.226,v),.008),
-      (u,v)=>u<.08 || u>.92 || v<.12 || v>.86 ? end : ochre,-1);
-    return model;
+    return Valley.blenderAssets.shapes("canvas_duffel",{fabric,gloss:15});
   }
 
   function doorWidth(entry,y) {

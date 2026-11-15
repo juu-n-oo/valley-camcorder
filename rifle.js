@@ -117,7 +117,8 @@
     const mouth=section(-1.386,.077,-.014,.066,.003,.094);
     const inside=section(-1.178,.077,-.014,.066,.003);
     const front=section(-.632,.115,-.032,.080,.006);
-    skin(body,nose,front,purple);
+    const {get,append}=Valley.blenderAssets;
+    append(body,get("violet_toy_cover").parts[0].shape,transform([0,0,0]));
     skin(body,mouth,nose,edge);
     skin(body,inside,mouth,dark);
     cap(body,inside.slice().reverse(),dark);
@@ -231,7 +232,7 @@
     return {
       body:renderer.mesh(body,12), door:renderer.mesh(door,12),
       beltSwitch:renderer.mesh(switchCap,12), button:renderer.mesh(button,12), track:renderer.mesh(track,9),
-      rearGrip:launcher.gripHand(renderer,1), gripThumb, pressIndex
+      rearGrip:launcher.gripHand(renderer), gripThumb, pressIndex
     };
   }
 

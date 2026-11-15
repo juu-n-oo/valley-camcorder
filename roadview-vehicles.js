@@ -299,38 +299,9 @@
   }
 
   function wheels(part,m,tire) {
-    if(tire) {
-      const stops=[[-.118,.247],[-.113,.283],[-.086,.307],[-.055,.319],[.067,.319],[.092,.310],[.113,.287],[.120,.247]];
-      const b=part(m.carTire);
-      for(let i=1;i<stops.length;i++) {
-        const [a,r]=stops[i-1],[c,s]=stops[i];
-        b.cylinder([a,0,0],[c,0,0],r,s,rubber,40,false);
-      }
-      b.cylinder([.120,0,0],[.121,0,0],.247,.246,rubber,40);
-      for(const r of [.252,.282]) {
-        curve(b,t=>[.119,r*Math.cos(t*Math.PI*2),r*Math.sin(t*Math.PI*2)],36,.0035,rgb(0x333538));
-      }
-      return;
-    }
-    const b=part(m.carMetal), dark=part(m.plain);
-    b.cylinder([.113,0,0],[.133,0,0],.205,.199,metal,36,false);
-    b.cylinder([.133,0,0],[.138,0,0],.199,.181,chrome,36,false);
-    b.cylinder([.138,0,0],[.108,0,0],.181,.160,metal,36,false);
-    dark.cylinder([.058,0,0],[.079,0,0],.165,.165,rgb(0x383d3b),30);
-    b.cylinder([.105,0,0],[.146,0,0],.061,.050,metal,24);
-    for(let i=0;i<6;i++) {
-      const angle=i*Math.PI/3;
-      const spoke=(u,v)=>{
-        const a=angle+(u-.5)*mix(.56,.258,v)-.12*v, radius=mix(.049,.190,v);
-        return [.131-.016*Math.sin(v*Math.PI),radius*Math.cos(a),radius*Math.sin(a)];
-      };
-      surface(b,6,5,spoke,metal,true);
-    }
-    for(let i=0;i<5;i++) {
-      const a=i*Math.PI*2/5,y=.044*Math.cos(a),z=.044*Math.sin(a);
-      dark.cylinder([.144,y,z],[.149,y,z],.009,.009,black,9);
-      b.cylinder([.149,y,z],[.151,y,z],.0058,.0058,chrome,7);
-    }
+    const {shapes,append}=Valley.blenderAssets;
+    const origin=transform([0,0,0]);
+    for(const {shape,material} of shapes(tire ? "sedan_tire" : "sedan_hub",m)) append(part(material),shape,origin);
   }
 
   function seats(part,m) {
