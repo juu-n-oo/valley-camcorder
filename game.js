@@ -50,7 +50,7 @@
   const blastRange=16.8, loosePartLife=30;
   const woodChipRange = 5.3;
   const startingCartridges = 5, rifleSupply = 12;
-  const fallbackSupplyDuration = 2.4, supplyRange = 1.6, supplyFinishLead = .2;
+  const supplyDuration = 2.4, supplyRange = 1.6;
   const supplyRustles = [.23,.49,.78,1.05,1.36,1.61,1.91,2.16];
   const newCartridge = sealed => ({
     cars:Array.from({length:launcher.carCount},(_,i)=>i),belt:0,feed:0,sealed
@@ -98,7 +98,6 @@
       const supplyAudio=Valley.supplyAudio;
       const supplyClips=typeof supplyAudio==="string" ? {duffel:supplyAudio} : supplyAudio??{};
       for(const [kind,clip] of Object.entries(supplyClips)) {
-        this.supplyRecordings[kind]=null; // Still decoding.
         this.decodeRecordings([clip],kind+" resupply").then(([recording])=>{
           this.supplyRecordings[kind]=recording;
         });
@@ -504,19 +503,19 @@
 
     playSupplyRecording(kind) {
       const context=this.context, buffer=this.supplyRecordings?.[kind];
-      if(!buffer || context?.state!=="running") return null;
+      if(!buffer || context?.state!=="running") return false;
       const source=context.createBufferSource(), gain=context.createGain();
       source.buffer=buffer;
       source.connect(gain).connect(this.effects);
-      const playback={source,gain,start:context.currentTime,duration:buffer.duration};
+      const playback={source,gain};
       this.supplyPlayback=playback;
       source.onended=()=>{
         if(this.supplyPlayback===playback) this.supplyPlayback=null;
         source.disconnect();
         gain.disconnect();
       };
-      source.start(playback.start);
-      return playback;
+      source.start(context.currentTime,0,supplyDuration);
+      return true;
     }
 
     rummageBag(opening = false) {
@@ -1270,40 +1269,31 @@
     resupply.hidden=true;
   }
 
-  function updateSupply(dt) {
+  function updateSupply() {
     if(!supply) return;
     if(death || !nearSupply()) {
       stopSupply();
       return;
     }
-    if(supply.time===supply.duration) return;
-    if(supply.duration===null && audio.supplyRecordings?.[supply.kind]!==null) {
-      const recording=audio.playSupplyRecording(supply.kind);
-      supply.recording=recording;
-      supply.duration=recording ? Math.max(.01,recording.duration-supplyFinishLead) : fallbackSupplyDuration;
-      if(!recording) audio.rummageBag(true);
-    }
-    const {duration,time:before,recording}=supply;
-    if(duration!==null) {
-      const time=recording ? audio.context.currentTime-recording.start : before+dt;
-      supply.time=Math.min(duration,time);
-    }
-    const ratio=duration===null ? 0 : supply.time/duration, percent=Math.floor(ratio*100);
+    if(supply.time===supplyDuration) return;
+    const {time:before,startedAt,recorded}=supply;
+    supply.time=Math.min(supplyDuration,(performance.now()-startedAt)/1000);
+    const ratio=supply.time/supplyDuration, percent=Math.floor(ratio*100);
     supplyMeter.style.setProperty("--health-ratio",ratio);
     supplyMeter.setAttribute("aria-valuenow",percent);
     supplyPercent.textContent=`${pad(percent)}%`;
-    if(supply.time===duration) {
+    if(supply.time===supplyDuration) {
       const long=equipped===rifleGear;
       if(long) rifleGear.reserve+=rifleSupply;
       else if(equipped===spiralGear) spiralGear.spares.push(spiral.newMagazine(),spiral.newMagazine());
       else pocket.push(newCartridge(true),newCartridge(true));
       inventory();
       supplyStatus.textContent=long ? `+${rifleSupply} MINICARS` : "+2 CARTRIDGES";
-      if(!recording) {
+      if(!recorded) {
         audio.stopSupplySound();
         audio.stowSupplies();
       }
-    } else if(!recording && supplyRustles.some(at=>before<at && supply.time>=at)) audio.rummageBag();
+    } else if(!recorded && supplyRustles.some(at=>before<at && supply.time>=at)) audio.rummageBag();
   }
 
   function updateHealth() {
@@ -1822,10 +1812,13 @@
       keys.add(e.code);
       if(pendingDraw || (equipped===rifleGear && refill)) return;
       if(nearSupply()) {
-        supply={kind:practiceRound ? "crate" : "duffel",time:0,duration:null,recording:null};
+        const startedAt=performance.now();
+        const recorded=audio.playSupplyRecording(practiceRound ? "crate" : "duffel");
+        supply={time:0,startedAt,recorded};
+        if(!recorded) audio.rummageBag(true);
         supplyStatus.textContent="RESUPPLYING";
         resupply.hidden=false;
-        updateSupply(0);
+        updateSupply();
       } else if (!handToss && player.ownsLauncher && !refill && !player.holstered) {
         const canQueue=equipped===rifleGear ? rifleGear.reserve>0 &&
           (mounted.cars.length<rifle.carCount || cycle?.feedsCar) : spareCartridges().length>0;
@@ -3384,7 +3377,7 @@
     }
     updateInterior(dt);
     audio.waterfall(player.x,player.z);
-    updateSupply(dt);
+    updateSupply();
     props.tick(map,dt,sceneTime,packRipples(),ripple,throwImpact);
     if(death) updateDeath(dt,aspect);
     else {
