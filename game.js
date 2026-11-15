@@ -3378,6 +3378,7 @@
     updateInterior(dt);
     audio.waterfall(player.x,player.z);
     updateSupply();
+    practice.updateSupplyCrate(map.road.practice,dt,Boolean(practiceRound && supply && supply.time<supplyDuration));
     props.tick(map,dt,sceneTime,packRipples(),ripple,throwImpact);
     if(death) updateDeath(dt,aspect);
     else {

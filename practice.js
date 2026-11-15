@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const { Builder, rgb, smooth, random, mix, times, plus, minus, transform } = Valley;
+  const { Builder, rgb, clamp, smooth, random, mix, times, plus, minus, transform } = Valley;
   const origin={x:1320,y:4.16,z:128},halfWidth=32,halfLength=28;
   const paving=[[0,16,6.3,21],[-22,1.3,4.6,34.2],[20,1.3,5.2,36],[-.7,-16,29,3.6]];
   const bounds={
@@ -30,6 +30,42 @@
     [23.4,1.32,-17.1,-.40,.46,0],
     [17.6,1.35,18.3,-.76,.48,1.76]
   ];
+
+  function buildSupplyCrate(renderer,area,m) {
+    const width=.92, depth=.65, height=.60, board=.012;
+    const kraft=rgb(0xc29762), sideKraft=rgb(0xb98d59);
+    const box=area(supply.x,supply.y,supply.z);
+    const wall={kind:"wall"};
+    for(const side of [-1,1]) {
+      box.box(m.plaster,[0,height/2,side*(depth-board)/2],[width,height,board],kraft,wall);
+      box.box(m.plaster,[side*(width-board)/2,height/2,0],[board,height,depth-2*board],sideKraft,wall);
+    }
+    box.box(m.plaster,[0,board,0],[width-2*board,board,depth-2*board],rgb(0x9c7045));
+    box.box(m.plain,[0,board*1.5+.001,0],[width-2*board,.002,.005],rgb(0x815b36));
+    box.box(m.plaster,[-width/2+.026,height/2,depth/2+.001],[.014,height,.002],sideKraft);
+    box.done();
+
+    function flap(span,length,taped) {
+      const mesh=new Builder();
+      mesh.box([0,0,length/2],[span,board,length],rgb(0xcaa471),.0015);
+      if(taped) mesh.box([0,board/2+.001,length-.015],[span-.006,.002,.03],rgb(0xe5d1a7));
+      return renderer.mesh(mesh,m.plaster);
+    }
+    const outer=flap(width-.008,depth/2-.004,true);
+    const inner=flap(depth-2*board-.008,.29,false);
+    const {x,y,z}=supply, lower=y+height+board*.56, upper=lower+board+.003;
+    return {open:0,flaps:[
+      {mesh:outer,at:[x,upper,z-depth/2],yaw:0,outer:true,angle:Math.PI+.27},
+      {mesh:outer,at:[x,upper,z+depth/2],yaw:Math.PI,outer:true,angle:Math.PI+.38},
+      {mesh:inner,at:[x-width/2,lower,z],yaw:Math.PI/2,outer:false,angle:Math.PI-.09},
+      {mesh:inner,at:[x+width/2,lower,z],yaw:-Math.PI/2,outer:false,angle:Math.PI+.14}
+    ]};
+  }
+
+  function updateSupplyCrate(scene,dt,resupplying) {
+    const rate=resupplying ? 1/.61 : -1/.43;
+    scene.crate.open=clamp(scene.crate.open+rate*dt,0,1);
+  }
 
   function build(renderer,{area,material:m,boundedMesh,boulder,stoneColliders,trees,stairs}) {
     const rng=random(44194),ground=new Builder();
@@ -113,9 +149,7 @@
     for(let z=-5.64;z<=5.66;z+=1.25) shed.box(m.wood,[0,2.63,z],[8.71,.107,.15],dark);
     shed.done();
 
-    yard.box(m.plaster,[-3.66,.33,23.4],[.91,.66,.65],rgb(0x65705c),{kind:"wall",radius:.076});
-    yard.box(m.wood,[-3.66,.70,23.4],[.98,.087,.72],wood,{radius:.023});
-    yard.label("보급품","",[-3.66,.421,23.738],.68,.35,"green");
+    const crate=buildSupplyCrate(renderer,area,m);
     const targets=targetDesigns.map(([x,y,z,yaw,radius,travel],id)=>{
       const [px,py,pz]=at(x,y,z),baseY=id===2 ? 1.63 : id===5 ? .142 : 0;
       const stand=area(px,origin.y,pz,yaw);
@@ -142,7 +176,7 @@
       }
       return renderer.mesh(b,m.plain);
     }
-    return {landscape,targets,ready:disc([dark,amber,pale,maroon]),marked:disc([post,blue,pale,rgb(0x7fa477)])};
+    return {landscape,targets,crate,ready:disc([dark,amber,pale,maroon]),marked:disc([post,blue,pale,rgb(0x7fa477)])};
   }
 
   function center(target,time) {
@@ -172,12 +206,18 @@
   }
 
   function view(scene,time) {
-    return scene.targets.map(target=>{
+    const models=scene.targets.map(target=>{
       const active=target.hitAt===null,p=center(target,time);
       const hinge=active ? 0 : smooth(0,.32,time-target.hitAt)*.83;
       return {mesh:active ? scene.ready : scene.marked,matrix:transform(p,hinge,target.yaw,0,target.radius)};
     });
+    for(const flap of scene.crate.flaps) {
+      // The outer flaps fold back first to clear the inner pair.
+      const phase=flap.outer ? smooth(0,.65,scene.crate.open) : smooth(.37,1,scene.crate.open);
+      models.push({mesh:flap.mesh,matrix:transform(flap.at,-flap.angle*phase,flap.yaw)});
+    }
+    return models;
   }
 
-  Valley.practice={bounds,contains,inScene,height,paved,spawn,supply,build,trace,view};
+  Valley.practice={bounds,contains,inScene,height,paved,spawn,supply,build,trace,view,updateSupplyCrate};
 })();
