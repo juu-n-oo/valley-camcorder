@@ -2,8 +2,8 @@
 
 (() => {
   const {Builder,clamp,mix,smooth,rgb,plus,minus,times,unit,dot,random,transform,point,direction}=Valley;
-  const {meshes:blenderMeshes}=Valley.blenderAssets;
-  const wood=rgb(0xa7784f), darkWood=rgb(0x765139), paleWood=rgb(0xc49a70), brass=rgb(0xb29863);
+  const {meshes:blenderMeshes,shapes:blenderShapes,append:appendBlender}=Valley.blenderAssets;
+  const wood=rgb(0xa7784f), darkWood=rgb(0x765139), brass=rgb(0xb29863);
   const ivory=rgb(0xe9e9df), porcelain=rgb(0xe9f0ed), silver=rgb(0xa8b6ba), dark=rgb(0x393b38);
   const holdTime=.48, lightLimit=10;
   const charredFixture={charred:true};
@@ -22,6 +22,14 @@
       return shapes.get(material);
     });
     return Array.from(shapes,([material,shape])=>scene.renderer.mesh(shape,material));
+  }
+
+  function appendModel(part,name,materials,at,{scale=[1,1,1],turn=0,pitch=0,tint}={}) {
+    const matrix=transform(at,pitch,turn);
+    for(let axis=0;axis<3;axis++) for(let row=0;row<3;row++) matrix[axis*4+row]*=scale[axis];
+    for(const {slot,shape,material} of blenderShapes(name,materials)) {
+      appendBlender(part(material),shape,matrix,Array.isArray(tint) ? tint : tint?.[slot]);
+    }
   }
 
   function create(renderer,material,collider) {
@@ -83,38 +91,31 @@
     const meshes=model(scene,part=>{
       const leaf=part(finish), hardware=part(m.gloss);
       if(glazed) {
-        for(const [at,size] of edges) leaf.box(at,size,tint,.005);
+        for(const [index,[at,size]] of edges.entries()) {
+          appendModel(part,index<2 ? "lodge_window_channel_upright" : "lodge_window_channel",m,at,
+            {scale:size,tint:{paint:tint}});
+        }
         for(const side of [-1,1]) hardware.box([rim*.53,height*.49,side*.036],[.033,Math.min(.145,height*.22),.028],silver,.008);
         return;
       }
-      leaf.box([width/2,height/2,0],[width,height,thickness],tint,.009);
       if(fridge) {
+        leaf.box([width/2,height/2,0],[width,height,thickness],tint,.009);
         leaf.box([width/2,height*.42,.041],[width-.054,height*.60,.032],rgb(0xdfdfd5),.014);
         leaf.box([width/2,height*.23,.077],[width-.085,.09,.084],ivory,.011);
         hardware.box([width-.065,height*.79,-.045],[.032,.213,.032],rgb(0xd4d4cc),.011);
-      } else for(const side of [-1,1]) {
-        const z=side*(thickness/2+.005);
-        if(lattice) {
-          leaf.box([width/2,height/2,z],[width-.088,height-.13,.012],rgb(0xdcded1),.002);
-          for(let i=0;i<=8;i++) {
-            const x=mix(.057,width-.057,i/8);
-            leaf.box([x,height/2,z+side*.009],[.013,height-.12,.018],paleWood);
+      } else {
+        appendModel(part,lattice ? "lodge_lattice_door" : "lodge_panel_door",m,
+          [width/2,height/2,0],{scale:[width,height,thickness],tint:{wood:tint}});
+        for(const side of [-1,1]) {
+          const z=side*(thickness/2+.005);
+          if(lattice) {
+            hardware.box([slide>0 ? .063 : width-.063,1.00,z+side*.013],[.027,.136,.019],darkWood,.005);
+          } else {
+            const x=width-.092;
+            hardware.cylinder([x,1.01,z],[x,1.01,z+side*.021],.029,.025,brass,14);
+            hardware.ellipsoid([x,1.01,z+side*.036],[.036,.034,.027],brass,null,16,9);
+            for(const y of [.29,height-.27]) leaf.box([.024,y,z],[.036,.073,.015],darkWood,.004);
           }
-          for(const y of [.09,.18,.29,.63,1.24,1.77,height-.09]) {
-            leaf.box([width/2,y,z+side*.009],[width-.09,.016,.018],paleWood);
-          }
-          hardware.box([slide>0 ? .063 : width-.063,1.00,z+side*.013],[.027,.136,.019],darkWood,.005);
-        } else {
-          for(const [y,h] of [[.49,.64],[1.46,.98]]) {
-            leaf.box([width/2,y,z],[width-.18,h,.012],times(tint,1.09),.008);
-            for(const v of [-1,1]) {
-              leaf.box([width/2,y+v*h/2,z+side*.004],[width-.15,.016,.014],times(tint,.86),.004);
-            }
-          }
-          const x=width-.092;
-          hardware.cylinder([x,1.01,z],[x,1.01,z+side*.021],.029,.025,brass,14);
-          hardware.ellipsoid([x,1.01,z+side*.036],[.036,.034,.027],brass,null,16,9);
-          for(const y of [.29,height-.27]) leaf.box([.024,y,z],[.036,.073,.015],darkWood,.004);
         }
       }
     });
@@ -621,6 +622,6 @@
     return false;
   }
 
-  Valley.lodging={create,model,fixture,body,door,pane,basin,bathroomFixtures,kitchen,sink,roomLight,target,use,prompt,tick,
+  Valley.lodging={create,model,appendModel,fixture,body,door,pane,basin,bathroomFixtures,kitchen,sink,roomLight,target,use,prompt,tick,
     waterVolume,leakSound,leakVisuals,lights,objects,impact,shatter,holdTime,igniteTick,releaseBurner,extinguish,gripSide,gripPose};
 })();

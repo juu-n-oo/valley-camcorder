@@ -14,11 +14,12 @@
     if(decoded.has(name)) return decoded.get(name);
     const definition=models[name];
     if(!definition) throw new Error("Missing Blender model "+name);
-    const parts=definition.parts.map(({slot,vertices,indices,weights})=>({
+    const parts=definition.parts.map(({slot,vertices,indices,joints,weights})=>({
       slot,shape:{vertices:decode(vertices,Float32Array),indices:decode(indices,Uint32Array)},
+      joints:joints ? decode(joints,Uint16Array) : null,
       weights:weights ? decode(weights,Float32Array) : null
     }));
-    const model={parts,pivots:definition.pivots};
+    const model={parts,pivots:definition.pivots,jointCount:definition.jointCount??3};
     decoded.set(name,model);
     return model;
   }
@@ -36,15 +37,19 @@
   function meshes(renderer,name,materials) {
     if(!meshCache.has(renderer)) meshCache.set(renderer,new Map());
     const cache=meshCache.get(renderer);
-    if(!cache.has(name)) cache.set(name,get(name).parts.map(({slot,shape,weights})=>{
+    if(cache.has(name)) return cache.get(name);
+    const model=get(name);
+    cache.set(name,model.parts.map(({slot,shape,joints,weights})=>{
       let skin=null;
       if(weights) {
-        const joints=new Uint16Array(weights.length);
-        for(let i=0;i<joints.length;i+=4) {
-          joints[i+1]=1;
-          joints[i+2]=2;
+        if(!joints) {
+          joints=new Uint16Array(weights.length);
+          for(let i=0;i<joints.length;i+=4) {
+            joints[i+1]=1;
+            joints[i+2]=2;
+          }
         }
-        skin={count:3,joints,weights};
+        skin={count:model.jointCount,joints,weights};
       }
       return renderer.mesh(shape,materialFor(materials,slot),undefined,null,skin);
     }));

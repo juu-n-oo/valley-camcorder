@@ -104,22 +104,8 @@
       tag.box([.046,.007,0],[.054,.012,.044],rgb(keyColors[i%keyColors.length]),.004);
       flatPrint(part(m.lobbyPrint),6+i,.046,.014,0,.050,.040);
     }));
-    const bell=model(part=>{
-      const b=part(m.gloss);
-      b.cylinder([0,.003,0],[0,.016,0],.054,.052,black,20);
-      b.ellipsoid([0,.023,0],[.047,.030,.047],brass,null,24,10);
-      b.cylinder([0,.043,0],[0,.060,0],.010,.013,metal,12);
-    });
-    const phone=model(part=>{
-      const plastic=part(m.paint), buttons=part(m.plain);
-      plastic.box([0,.024,0],[.212,.048,.185],rgb(0x4c5b52),.014);
-      plastic.box([-.071,.061,0],[.064,.031,.18],rgb(0x425149),.016);
-      for(const z of [-.064,.064]) plastic.box([-.071,.059,z],[.075,.047,.060],rgb(0x43554a),.013);
-      for(let row=0;row<4;row++) for(let col=0;col<3;col++) {
-        buttons.box([-.004+col*.027,.053,-.024+row*.024],[.016,.011,.016],white,.002);
-      }
-      buttons.box([.029,.051,-.058],[.081,.007,.023],rgb(0xc5cdba),.003);
-    });
+    const propAsset=name=>Valley.props.compile(scene.renderer,Valley.blenderAssets.shapes(name,m));
+    const bell=propAsset("lodge_reception_bell"), phone=propAsset("lodge_reception_phone");
     const crt=model(part=>{
       const shell=part(m.paint), vents=part(m.plain), screen=part(m.cctv);
       shell.box([0,.207,-.042],[.571,.413,.417],rgb(0x434847),.057);
@@ -184,9 +170,15 @@
     box(cladding,wall,sill/2,mid,.224,sill,width,base,.006,"wall");
     box(m.wood,wall,(head+h)/2,mid,.158,h-head,width,wood,.008,"wall");
     for(const z of [lo+.037,hi-.037]) box(m.wood,wall,h/2,z,.266,h,.075,wood,.009,"wall");
-    for(const y of [sill+.016,head-.022]) box(m.gloss,wall,y,mid,.158,.032,width-.08,trim,.004);
-    for(const z of [lo+.076,hi-.078]) box(m.paint,wall,(sill+head)/2,z,.143,head-sill,.042,trim,.005,"wall");
-    box(m.paint,wall+.039,(sill+head)/2,mid,.075,head-sill,.033,trim,.004);
+    for(const y of [sill+.016,head-.022]) {
+      a.blender("lodge_window_channel",[wall,y,mid],{turn:-Math.PI/2,scale:[width-.08,.032,.158],tint:{paint:trim}});
+    }
+    for(const z of [lo+.076,hi-.078,mid]) {
+      const end=z!==mid, x=end ? wall : wall+.039, depth=end ? .143 : .075, wide=end ? .042 : .033;
+      const center=[x,(sill+head)/2,z];
+      a.blender("lodge_window_channel_upright",center,{turn:-Math.PI/2,scale:[wide,head-sill,depth],tint:{paint:trim}});
+      if(end) a.body(center,[depth,head-sill,wide],"wall");
+    }
     box(m.paint,wall-.131,.086,mid,.043,.168,width-.053,trim,.007);
     a.label("안내실","INFORMATION",[wall-.089,2.323,mid],1.37,.52,styleColors.sign,-Math.PI/2);
     a.label("객실 요금","체크인 · 체크아웃",[wall-.140,1.778,lo-.335],.477,.532,"stone",-Math.PI/2);

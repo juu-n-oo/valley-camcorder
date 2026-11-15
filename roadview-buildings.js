@@ -39,6 +39,11 @@
     let level=0;
     const box=(mat,x,y,z,w,h,d,color,opts={})=>a.box(mat,[x,y+level,z],[w,h,d],color,opts);
     const block=(mat,x,y,z,w,h,d,color,opts={})=>box(mat,x,y,z,w,h,d,color,{...hard,...opts});
+    function profile(name,slot,color,x,y,z,width,height,depth,turn=0,kind) {
+      const center=[x,y+level,z], size=[width,height,depth];
+      a.blender(name,center,{turn,scale:size,tint:{[slot]:color}});
+      if(kind) a.body(center,Math.abs(Math.sin(turn))>.5 ? [depth,height,width] : size,kind,slot==="wood" ? "wood" : kind);
+    }
 
     function platform() {
       if(guesthouse) {
@@ -104,6 +109,17 @@
           a.triangle(curved ? m.wood : facade,[faceX,y-.135,0],topPoint,edge,curved ? beam : wallTint);
           a.beam(m.tile,topPoint,edge,curved ? .076 : .037,.053,color,8);
         }
+        if(!traditional) {
+          const tint=rgb(style==="brick" ? 0x8b877d : 0xbab3a6), edge=side*(length+.052);
+          a.blender("lodge_gutter",[0,y-.091,edge],{turn:side>0 ? 0 : Math.PI,scale:[wide,.146,.159],tint:{paint:tint}});
+          const x=side*(w/2-.24), face=side*(front+.082);
+          a.beam(m.paint,[x,y-.142,edge],[x,y-.338,face],.039,.037,tint,10);
+          a.beam(m.paint,[x,y-.338,face],[x,.193,face],.037,.037,tint,10);
+          a.beam(m.paint,[x,.193,face],[x,.104,face+side*.101],.037,.039,tint,10);
+          for(let mount=.58;mount<y-.5;mount+=1.28) {
+            a.beam(m.gloss,[x,mount,face-.009],[x,mount+.020,face-.009],.044,.044,rgb(0x908d84),10);
+          }
+        }
       }
       const ridge=half-(curved ? hip-.03 : .05);
       a.beam(m.tile,[-ridge,y+rise+.031,0],[ridge,y+rise+.031,0],curved ? .098 : .046,curved ? .098 : .046,color,9);
@@ -137,22 +153,29 @@
     function window(lo,hi,z=front,back=false) {
       const mid=(lo+hi)/2,side=back ? -1 : 1, low=.92,high=2.14;
       const frame=traditional ? beam : guesthouse || style==="shelter" ? wood : charcoal;
-      const trim=traditional ? {} : {kind:"wall"};
+      const material=traditional ? "wood" : "paint", name=traditional ? "lodge_casing" : "lodge_window_channel";
+      const trim=traditional ? undefined : "wall", turn=back ? Math.PI : 0;
       if(traditional) box(m.plaster,mid,(high+low)/2,z-side*.017,hi-lo,high-low,.032,rgb(0xb3a584),{kind:"wall"});
       else for(const [left,right] of [[lo,mid],[mid,hi]]) {
         lodgings.pane(interior,a,[(left+right)/2,level+(low+high)/2,z-side*.017],right-left-.029,high-low-.028);
       }
-      for(const y of [low,high,traditional ? 1.47 : 1.62]) box(m.wood,mid,y,z+side*.053,hi-lo+.10,.053,.14,frame,trim);
-      for(let i=0;i<=(traditional ? 5 : 2);i++) {
-        box(m.wood,mix(lo,hi,i/(traditional ? 5 : 2)),(low+high)/2,z+side*.034,.052,high-low+.055,.138,frame,trim);
+      for(const y of [low,high,traditional ? 1.47 : 1.62]) {
+        profile(name,material,frame,mid,y,z+side*.053,hi-lo+.10,.053,.14,turn,trim);
       }
-      box(m.plaster,mid,low-.042,z+side*.045,hi-lo+.20,.068,.24,traditional ? granite : plaster,soft);
+      for(let i=0;i<=(traditional ? 5 : 2);i++) {
+        profile(name+"_upright",material,frame,mix(lo,hi,i/(traditional ? 5 : 2)),(low+high)/2,
+          z+side*.034,.052,high-low+.055,.138,turn,trim);
+      }
+      profile("lodge_stone_sill","plaster",traditional ? granite : plaster,mid,low-.042,z+side*.045,
+        hi-lo+.20,.068,.24,turn);
     }
 
     function doorway(center,width,z=front,wooden=traditional) {
       const jamb=wooden || guesthouse ? beam : charcoal, top=2.18;
-      for(const side of [-1,1]) box(m.wood,center+side*(width/2+.033),top/2,z,.069,top,.24,jamb,{radius:.011});
-      box(m.wood,center,top,z,width+.16,.083,.24,jamb);
+      for(const side of [-1,1]) {
+        profile("lodge_casing_upright","wood",jamb,center+side*(width/2+.033),top/2,z,.069,top,.24);
+      }
+      profile("lodge_casing","wood",jamb,center,top,z,width+.16,.083,.24);
       box(m.rock,center,.017,z,width,.037,.30,granite,{radius:.009,kind:"rock",stepBank:"outdoorStone"});
       if(guesthouse) {
         lodgings.door(interior,a,[center-width/2+.036,level+.041,z],width-.072,{swing:1.57,open:true});
@@ -336,12 +359,12 @@
     }
 
     function light(x,z) {
-      box(m.plain,x,h-.145,z,.12,.199,.12,charcoal);
-      box(m.plaster,x,h-.254,z,.41,.082,.25,rgb(0xe1d2a7),{radius:.023});
+      a.blender("lodge_exterior_light",[x,level+h-.218,z]);
     }
 
     function furniture(x,z,w,d,y=.72) {
-      block(m.wood,x,y,z,w,.084,d,wood,{radius:.019});
+      profile("lodge_tabletop","wood",wood,x,y+.042,z,w,.084,d);
+      a.body([x,y+level,z],[w,.084,d],"wall","wood");
       for(const s of [-1,1]) for(const t of [-1,1]) {
         box(m.wood,x+s*(w/2-.11),y*.48,z+t*(d/2-.10),.081,y*.96,.081,beam,soft);
       }
@@ -408,8 +431,8 @@
       for(const x of [-cofferWidth/2,cofferWidth/2]) box(m.wood,x,2.53,(cofferNear+cofferFar)/2,
         .098,.082,cofferFar-cofferNear+.094,beam);
       for(const z of [cofferNear,cofferFar]) box(m.wood,0,2.53,z,cofferWidth+.094,.082,.098,beam);
-      suites.sofa(a,m,wing-1.31,front-.52,1.97,rgb(0x8d7970));
-      suites.lowTable(a,m,wing-1.31,front-1.48,.98,.48);
+      suites.sofa(a,wing-1.31,front-.52,1.97,rgb(0x8d7970));
+      suites.lowTable(a,wing-1.31,front-1.48,.98,.48);
       box(m.ceramicTile,wing-.10,.765,branch+.04,.305,1.53,.314,rgb(0xc4b3a5),{radius:.017});
       a.label("객실","STAIRS",[wing-.47,2.373,branch+.089],.72,.241,"wood");
       light([dining+.067,half-.085,branch+.061,front-.084],reception-.47,branch+.071,0,"cluster");
@@ -511,21 +534,25 @@
       const half=width/2-.065, far=front+depth-.075, near=front+.068;
       const head=2.244, sill=.050, middle=(head+sill)/2, paneHeight=head-sill-.045;
       const opening=2.18, frame=rgb(0xe0dcd0), clear=rgb(0xb6cbc9);
-      for(const y of [sill,head]) box(m.paint,0,y,far,width,.054,.084,frame,{radius:.005});
+      for(const y of [sill,head]) profile("lodge_window_channel","paint",frame,0,y,far,width,.054,.084);
       box(m.gloss,opening*.49,.018,far-.076,opening*2.04,.026,.081,rgb(0xb2b7b4),{radius:.004});
       box(m.paint,opening*.49,head-.044,far-.076,opening*2.04,.049,.091,frame,{radius:.004});
       for(const side of [-1,1]) {
         const start=opening/2+.026, bays=Math.ceil((half-start)/1.52);
         for(let i=0;i<=bays;i++) {
           const x=mix(start,half,i/bays);
-          block(m.paint,side*x,middle,far,.062,head-sill,.081,frame,{radius:.006});
+          profile("lodge_window_channel_upright","paint",frame,side*x,middle,far,.062,head-sill,.081,0,"wall");
           if(i===bays) continue;
           const next=mix(start,half,(i+1)/bays);
           lodgings.pane(interior,a,[side*(x+next)/2,middle,far],next-x-.053,paneHeight,{tint:clear});
         }
         const x=side*half, mid=(near+far)/2;
-        for(const y of [sill,head]) box(m.paint,x,y,mid,.082,.056,far-near+.065,frame,{radius:.004});
-        for(const z of [near,mid]) block(m.paint,x,middle,z,.082,head-sill,.063,frame,{radius:.005});
+        for(const y of [sill,head]) {
+          profile("lodge_window_channel","paint",frame,x,y,mid,far-near+.065,.056,.082,side*Math.PI/2);
+        }
+        for(const z of [near,mid]) {
+          profile("lodge_window_channel_upright","paint",frame,x,middle,z,.063,head-sill,.082,side*Math.PI/2,"wall");
+        }
         for(const z of [mix(near,far,.25),mix(near,far,.75)]) {
           lodgings.pane(interior,a,[x,middle,z],(far-near)/2-.053,paneHeight,{yaw:Math.PI/2,tint:clear});
         }
@@ -575,9 +602,7 @@
     }
 
     function pottery(x,y,z,tint=charcoal) {
-      a.oval(m.plaster,[x,y+.078,z],[.112,.079,.114],tint);
-      a.beam(m.plaster,[x,y+.129,z],[x,y+.165,z],.068,.078,tint,12);
-      a.oval(m.plain,[x,y+.165,z],[.055,.009,.055],charcoal);
+      a.blender("lodge_onggi",[x,y+level,z],{tint:{gloss:tint}});
     }
 
     function toilet() {
@@ -585,10 +610,8 @@
       for(const side of [-1,1]) {
         const x=side*w*.251;
         block(m.wood,side*w*.464,1.14,-.79,.14,2.28,.71,teal);
-        box(m.plaster,x,.22,-front+.75,.36,.44,.62,white,{radius:.053,kind:"wall"});
-        a.oval(m.plaster,[x,.461,-front+.77],[.230,.089,.284],white);
-        a.oval(m.plain,[x,.518,-front+.75],[.149,.026,.203],glass);
-        box(m.plaster,x,.61,-front+.37,.449,.37,.203,white,{radius:.035});
+        a.blender("toilet",[x,.002,-front+.695]);
+        a.body([x,.22,-front+.75],[.36,.44,.62],"wall");
         box(m.wood,side*.32,1.73,-.73,.54,.40,.086,teal,soft);
       }
       block(m.plaster,w/2-.30,.77,.71,.56,.22,1.23,cream,{radius:.052});

@@ -233,45 +233,64 @@ def rocks():
 
 
 def cliff_faces():
-    outline=[(-1,-.62),(-.98,-.26),(-.94,.09),(-.99,.43),(-.85,.73),
-             (-.62,.94),(.12,1),(.70,.88),(1,.43),(.99,-.36),(.62,-.90),(-.55,-1)]
-    levels=[(-1,.88),(-.86,1),(-.58,1.012),(-.28,1),(-.18,.970),(-.15,.990),
-            (.17,.987),(.39,.954),(.61,.932),(.76,.902),(.88,.857),(.970,.765),(1,.66)]
-    for index in range(3):
+    outline=[(-.90,-.82),(-1,-.54),(-.96,-.22),(-.84,-.068),(-1.045,.12),(-1.01,.51),
+             (-.89,.77),(-.63,.96),(-.13,1),(.58,.93),(.95,.57),(1,.14),(.94,-.45),
+             (.70,-.83),(.18,-.98),(-.49,-1.02)]
+    course_patterns=[
+        [-1,-.90,-.67,-.51,-.32,-.04,.09,.32,.58,.82,1],
+        [-1,-.75,-.56,-.24,-.11,.08,.28,.44,.69,.89,1],
+        [-1,-.85,-.58,-.39,-.28,.00,.13,.34,.46,.67,.86,1],
+    ]
+    for index, courses in enumerate(course_patterns):
         rng=Random(1811+index*513)
         name=asset(f"cliff_face_{index}","Unyeongdam cliff")
-        facets=[(rng.uniform(-.055,.048),rng.uniform(-.09,.095),rng.uniform(-.040,.040)) for _ in outline]
+        faults=[(rng.uniform(-.06,.075),rng.uniform(-.09,.074),rng.uniform(-.065,.065)) for _ in outline]
+        seams=[(rng.uniform(-.061,.061),rng.uniform(-.056,.058)) for _ in courses]
         rows=[]
-        for y,wide in levels:
-            row=[]
-            for i,((x,z),(dx,dz,dent)) in enumerate(zip(outline,facets)):
-                cut=(.017*sin(y*9+i*1.7)+dent)*smooth(-.86,.6,y)
-                off=.11*y+.018*sin(y*6+index)
-                top_break=(.085*sin(i*1.74+index)-.029*cos(i*3.4)) if y>.85 else .018*sin(i*1.01+y)
-                row.append(((x+dx)*wide+cut+off,y+top_break,(z+dz)*wide))
-            rows.append(row)
+        proxy=[]
+        for layer, (base, top) in enumerate(zip(courses,courses[1:])):
+            individual=rng.uniform(.89,1.10)
+            depth=rng.uniform(.073,.15)
+            offset=rng.uniform(-.055,.065)
+            extents=(.084, .019, 0, .026)
+            offsets=[(y,cut) for y,cut in zip((.0,.12,.52,.90),extents)]
+            if layer==len(courses)-2:
+                offsets.append((1,.074))
+            for step,(t,cut) in enumerate(offsets):
+                y=blend(base,top,t)
+                size=(1-.14*smooth(.14,.86,y) - .14*smooth(.83,1,y))*individual*(1-cut)
+                row=[]
+                for i,((x,z),(dx,dz,dent)) in enumerate(zip(outline,faults)):
+                    nx,nz=seams[layer]
+                    tx,tz=seams[layer+1]
+                    lift=blend(x*nx+z*nz,x*tx+z*tz,t)
+                    crown=.062*cos(i*1.313+index)*smooth(.70,1.0,y)
+                    crease=depth*(i in (3,8,14))*(.78+.22*cos(y*5+index))
+                    inset=crease+max(0,cut-.025)*.82
+                    row.append(((x+dx)*(size-inset)+dent+.13*y+offset,y+lift+crown,
+                                (z+dz)*(size-inset)+.068*sin(y*2.6+index)+.05*offset))
+                rows.append(row)
+                if step==2 or layer==0 and step==0 or t==1:
+                    proxy.append(row[::2])
         ymax=max(p[1] for row in rows for p in row)
         rows=[[(x,y/ymax,z) for x,y,z in row] for row in rows]
+
         def rock_tint(p):
             x,y,z=p
-            dark=exp(-((z+.36+.034*y)/.105)**2)+.7*exp(-((z-.31+.09*y)/.124)**2)
-            ledge=exp(-((y+.155+.041*z)/.043)**2)
-            weather=.12*sin(13*x+31*z+2*y)+.04*cos(47*z+13*x)
-            wet=.18*(1-smooth(-.96,-.55,y))
-            shade=1.15+weather-.16*dark-.13*ledge-wet
-            pink=.054*sin(27*z+2.1*y)*smooth(-.80,.8,y)
-            moss=.12*smooth(.58,.93,sin(3*x+9*z)*cos(9*y+11*z))*smooth(.01,.90,y)
-            return (shade+pink-.06*moss,shade*.979-.07*moss,shade*.942-pink*.26-.25*moss)
-        stone=rows_mesh(name,"rock","Tall fractured granite face",rows,rock_tint)
+            band_distance=min(abs(y*ymax-height-(x*lean[0]+z*lean[1])) for height,lean in zip(courses[1:-1],seams[1:-1]))
+            seam=(1-smooth(.012,.048,band_distance))*.33
+            weather=.10*sin(8*x+17*z+1.6*y)+.04*cos(31*z+17*x)
+            dark=.20*(1-smooth(-.99,-.57,y))+.11*exp(-((z+.07+.055*y)/.10)**2)
+            shade=.98+weather-seam-dark
+            pink=.058*sin(13*z+2.1*y)*smooth(-.76,.8,y)
+            moss=.20*smooth(.41,.85,sin(3*x+9*z+index)*cos(9*y+11*z))*smooth(-.34,.74,y)
+            return (shade+pink-.25*moss,shade*.993-.085*moss,shade*.986-pink*.4-.40*moss)
+
+        stone=rows_mesh(name,"rock","Granite joint sets and broken slabs",rows,rock_tint)
+        assign_location_material(stone,bpy.data.materials["Fissured granite"],lambda p:((p[0]+p[2])*.71,p[1]*1.55))
         proxy_name=asset(name+"_collision","Unyeongdam cliff",hidden=True)
-        proxy=stone.copy()
-        proxy.data=stone.data.copy()
-        proxy.name="Unyeongdam collision"
-        ASSETS[proxy_name]["collection"].objects.link(proxy)
-        ASSETS[proxy_name]["records"].append((proxy,"rock",(1,1,1),None))
-        reduction=proxy.modifiers.new("Collision simplification","DECIMATE")
-        reduction.ratio=.35
-        apply(proxy,reduction)
+        hull=[[(x,y/ymax,z) for x,y,z in row] for row in proxy]
+        rows_mesh(proxy_name,"rock","Unyeongdam collision",hull,(1,1,1))
 
 
 def lodging_details():
@@ -798,25 +817,40 @@ def export_models():
     depsgraph=bpy.context.evaluated_depsgraph_get()
     definitions={}
     for name,group in ASSETS.items():
+        if group.get("source_only"):
+            continue
         merged={}
-        skinned="bones" in group
+        skin=group.get("skin")
+        skinned=skin is not None or "bones" in group
         for obj,slot,paint,uv in group["records"]:
-            target=merged.setdefault(slot,{"vertices":[],"triangles":[],"weights":[]})
+            target=merged.setdefault(slot,{"vertices":[],"triangles":[],"weights":[],"joints":[]})
             evaluated=obj.evaluated_get(depsgraph)
             data=evaluated.to_mesh()
             data.calc_loop_triangles()
             lookup={}
             for triangle in data.loop_triangles:
-                for loop_id in triangle.loops:
+                points=[game_point(data.vertices[data.loops[i].vertex_index].co) for i in triangle.loops]
+                coords=[uv(p) if uv else (p[0]*3+.5,p[2]*3+.5) for p in points]
+                if group.get("uv_seams") and max(u for u,v in coords)-min(u for u,v in coords)>.5:
+                    coords=[(u+(u<.5),v) for u,v in coords]
+                for loop_id,p,tex in zip(triangle.loops,points,coords):
                     loop=data.loops[loop_id]
-                    p=game_point(data.vertices[loop.vertex_index].co)
                     norm=game_point(data.corner_normals[loop_id].vector)
-                    values=(*p,*norm,*(uv(p) if uv else (p[0]*3+.5,p[2]*3+.5)),*(paint(p) if callable(paint) else paint))
+                    values=(*p,*norm,*tex,*(paint(p) if callable(paint) else paint))
                     values=tuple(round(x,6) for x in values)
                     if values not in lookup:
                         lookup[values]=len(target["vertices"])//11
                         target["vertices"].extend(values)
-                        if skinned:
+                        if skin is not None:
+                            influences=list(skin["weights"](p))
+                            total=sum(weight for joint,weight in influences)
+                            if (not 0 < len(influences) <= 4 or total <= 0
+                                or any(weight < 0 or not 0 <= joint < skin["count"] for joint,weight in influences)):
+                                raise ValueError(f"Invalid skin weights in {name}: {influences}")
+                            influences.extend([(0,0)]*(4-len(influences)))
+                            target["weights"].extend(weight/total for joint,weight in influences)
+                            target["joints"].extend(joint for joint,weight in influences)
+                        elif skinned:
                             target["weights"].extend(bone_weights(name,p))
                     target["triangles"].append(lookup[values])
             evaluated.to_mesh_clear()
@@ -825,9 +859,13 @@ def export_models():
             obj={"slot":slot,"vertices":encode("f",data["vertices"]),"indices":encode("I",data["triangles"])}
             if skinned:
                 obj["weights"]=encode("f",data["weights"])
+            if skin is not None:
+                obj["joints"]=encode("H",data["joints"])
             exported.append(obj)
         definition={"parts":exported}
-        if skinned:
+        if skin is not None:
+            definition["jointCount"]=skin["count"]
+        if "bones" in group:
             definition["pivots"]=group["bones"][1:3]
         definitions[name]=definition
         print(f"{name}: {sum(len(data['triangles'])//3 for data in merged.values())} triangles")
@@ -867,8 +905,15 @@ def arrange_source():
     bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"blender"/"valley-assets.blend"),compress=True)
 
 
+def run_recipe(filename, entry):
+    source=ROOT/"blender"/filename
+    exec(compile(source.read_text(encoding="utf-8"),str(source),"exec"),globals())
+    globals()[entry]()
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    run_recipe("location-assets.py","build_location")
     rocks()
     cliff_faces()
     bridge_pier()
@@ -878,9 +923,14 @@ def main():
     wheel()
     crate()
     duffel()
+    run_recipe("camp-assets.py","build_camp_details")
     cars()
     toy_exteriors()
     hands()
+    run_recipe("architecture-assets.py","build_architecture")
+    finish_architecture()
+    run_recipe("vehicle-assets.py","build_vehicles")
+    run_recipe("hand-assets.py","build_hands")
     export_models()
     for name,group in ASSETS.items():
         if "bones" in group:

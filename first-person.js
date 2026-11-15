@@ -81,6 +81,26 @@
     }
   }
 
+  function idleFingers(motion,side) {
+    const swing=Math.sin(motion.phase*.5+side*Math.PI*.5)*motion.walk;
+    return {curl:mix(.12,.35,motion.run)+.035*swing,pinch:.035,splay:.90-.32*motion.run,extension:0};
+  }
+
+  function gripFingers(prop,load) {
+    if(prop.kind==="table" || prop.kind==="desk") return {curl:.23+load*.09,pinch:.13,splay:1.13,extension:0};
+    if(prop.small && prop.kind!=="crt") {
+      const size=Math.max(prop.rx,prop.rz);
+      const thumb=smooth(.22,.055,size);
+      return {curl:.34+thumb*.20,pinch:.20+.31*thumb,splay:.94-.26*thumb,extension:0};
+    }
+    return {curl:.28+load*.21,pinch:.16,splay:1.04,extension:0};
+  }
+
+  function blendFingers(from,to,t) {
+    return {curl:mix(from.curl,to.curl,t),pinch:mix(from.pinch,to.pinch,t),
+      splay:mix(from.splay,to.splay,t),extension:mix(from.extension,to.extension,t)};
+  }
+
   function gripFor(prop,cam) {
     const at=translation(prop.matrix);
     const eye=minus(cam.at,at);
@@ -104,6 +124,7 @@
     });
     const facing=contacts[0].normal;
     return {two:contacts.length>1,load,center:lerp(contacts[0].at,contacts.at(-1).at,.5),contacts,
+      fingers:gripFingers(prop,load),
       yaw:-Math.atan2(facing[0],facing[2])};
   }
 
@@ -207,7 +228,7 @@
     return {shoulder,elbow};
   }
 
-  function drawHand(out,toy,cam,matrix,side,grip,{pointing=false,curl=.29,pinch=.22}={}) {
+  function drawHand(out,toy,cam,matrix,side,grip,{curl,pinch,splay,extension}) {
     const local=matrix.slice();
     // Rotate each world-space hand axis into the current view, including the reflected left mesh.
     for(let i=0;i<12;i+=4) {
@@ -216,7 +237,7 @@
     }
     local.set(toView(cam,translation(matrix)),12);
     const arm=[];
-    Valley.launcher.reach(arm,toy.support,local,grip,0,0,pointing,{side,pinch:pinch*grip,curl:curl*grip,
+    Valley.launcher.reach(arm,toy.support,local,grip,0,0,false,{side,pinch:pinch*grip,curl:curl*grip,splay,extension,
       ik:(wrist,side)=>solveArm(wrist,side,cam.frustum[1])});
     for(const part of arm) out.push({...part,matrix:part.matrix ? multiply(cam.toWorld,part.matrix) : cam.toWorld});
   }
@@ -355,7 +376,8 @@
 
     detach(prop,after,drape=0) {
       if(this.grip && this.matrix) {
-        const poses=this.grip.contacts.map(c=>({side:c.side,matrix:propHand(prop,this.matrix,c,drape),grip:.94}));
+        const poses=this.grip.contacts.map(c=>({side:c.side,matrix:propHand(prop,this.matrix,c,drape),grip:.94,
+          fingers:this.grip.fingers}));
         this.action={kind:"release",poses,age:0,duration:.26,after};
       } else this.action=null;
       this.grip=null;
@@ -454,9 +476,12 @@
 
     reachHands(action,cam) {
       const {prop,grip,delay,duration}=action, motion=this.motion.sample();
-      const t=ease((this.age-delay)/(duration-delay));
+      const progress=clamp((this.age-delay)/(duration-delay),0,1);
+      const t=ease(progress), open=smooth(0,.44,progress), close=smooth(.54,1,progress);
       return grip.contacts.map(c=>({
-        side:c.side,grip:mix(.21,.94,smooth(.62,1,t)),
+        side:c.side,grip:mix(mix(mix(.24,.55,motion.run),.12,open),.94,close),
+        fingers:blendFingers(blendFingers(idleFingers(motion,c.side),
+          {curl:.05,pinch:0,splay:1.20,extension:0},open),grip.fingers,close),
         matrix:handBlend(freeHand(cam,c.side,motion),propHand(prop,prop.matrix,c),c.side,t,arc(t)*.08)
       }));
     }
@@ -469,8 +494,11 @@
       const {item,face,side,duration}=action, t=ease(this.age/duration);
       const target=fixtureHand(hand,item,face,side);
       const pointing=Boolean(item.grip.pointing);
-      return {side,pointing,matrix:handBlend(freeHand(cam,side,this.motion.sample()),target,side,t,arc(t)*.055),
-        grip:mix(.25,pointing ? .78 : .95,smooth(.55,1,this.age/duration))};
+      const motion=this.motion.sample(), close=smooth(.35,.90,t);
+      return {side,matrix:handBlend(freeHand(cam,side,motion),target,side,t,arc(t)*.055),
+        fingers:blendFingers(idleFingers(motion,side),
+          {curl:pointing ? .43 : .36,pinch:pointing ? .17 : .32,splay:.81,extension:Number(pointing)},close),
+        grip:mix(mix(.24,.55,motion.run),pointing ? .78 : .95,close)};
     }
 
     render(toy,cam,player,allowFree) {
@@ -478,13 +506,14 @@
       if(allowFree && !(action?.kind==="reach" && this.age<action.delay)) {
         for(const side of [-1,1]) {
           if(this.grip?.contacts.some(c=>c.side===side)) continue;
-          hands.set(side,{side,matrix:freeHand(cam,side,motion),grip:mix(.24,.55,motion.run)});
+          hands.set(side,{side,matrix:freeHand(cam,side,motion),grip:mix(.24,.55,motion.run),fingers:idleFingers(motion,side)});
         }
       }
       if(player.carried && this.grip && this.matrix) {
         const prop=player.carried, drape=this.drape();
         out.push(...Valley.props.partsAt(prop,this.matrix,drape));
-        for(const c of this.grip.contacts) hands.set(c.side,{side:c.side,matrix:propHand(prop,this.matrix,c,drape),grip:.94});
+        for(const c of this.grip.contacts) hands.set(c.side,{side:c.side,matrix:propHand(prop,this.matrix,c,drape),grip:.94,
+          fingers:this.grip.fingers});
       }
       if(action?.kind==="reach" && this.age>=action.delay) {
         for(const pose of this.reachHands(action,cam)) hands.set(pose.side,pose);
@@ -496,10 +525,11 @@
         for(const pose of action.poses) {
           hands.set(pose.side,{...pose,
             matrix:handBlend(pose.matrix,freeHand(cam,pose.side,motion),pose.side,t,.045*arc(t)),
-            grip:mix(pose.grip,mix(.24,.55,motion.run),open)});
+            grip:mix(pose.grip,mix(.24,.55,motion.run),open),
+            fingers:blendFingers(pose.fingers,idleFingers(motion,pose.side),open)});
         }
       }
-      for(const {matrix,side,grip,pointing} of hands.values()) drawHand(out,toy,cam,matrix,side,grip,{pointing});
+      for(const {matrix,side,grip,fingers} of hands.values()) drawHand(out,toy,cam,matrix,side,grip,fingers);
       return out;
     }
   }

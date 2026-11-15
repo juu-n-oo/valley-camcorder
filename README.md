@@ -95,9 +95,9 @@ Ctrl을 누른 채 Z를 두 번 누르면 엎드렸다가 쪼그린 자세로 �
 
 ## 그래픽 에셋
 
-Blender 모델은 [valley-assets.blend](blender/valley-assets.blend)에 있습니다. 이전 채팅의 계곡·숙소·차량·미니카 자료를 참고한 모델을 컬렉션별로 묶었습니다. 게임에서는 Blender에서 내보낸 [blender-models.js](blender-models.js)를 불러오므로 `index.html`을 파일로 열어도 모델을 볼 수 있습니다.
+Blender 원본은 [valley-assets.blend](blender/valley-assets.blend)에 있습니다. 2001년 8월 18일과 26일 촬영 영상에서 운영담 암벽의 균열과 숲 경계, 자갈톱과 수면 색을 참고했습니다. 계곡과 건축 마감 재질, 숙소 시설물, 조립한 소나타, 야영 식기, 16관절 1인칭 손을 컬렉션별로 확인할 수 있습니다. 영상은 풍경을 참고한 자료로 사용했습니다.
 
-모델을 다시 생성하려면 Blender 실행 파일로 `blender --background --factory-startup --disable-autoexec --python-exit-code 1 --python blender/build-assets.py`를 실행합니다. Blender의 `.blend`와 WebGL용 메시를 함께 생성합니다.
+모델을 다시 생성하려면 Blender 실행 파일로 `blender --background --factory-startup --disable-autoexec --python-exit-code 1 --python blender/build-assets.py`를 실행합니다. 이 명령은 Blender 원본과 게임에서 직접 읽는 [메시](blender-models.js) 및 [텍스처](location-textures.js)를 함께 생성합니다.
 
 `20010818_화양계곡.mp4`의 2분 23초와 6분 14초 부근에서 모래톱 텐트와 물가의 다색 파라솔, 파란 탁자와 노란 접이식 의자를 참고했습니다. 3분 20초 부근의 올리브빛 수면과 밝은 물결, 4분 24초와 5분 05초 부근의 다리 너머 숲과 산세, 7분 12초 부근의 파란 보트형 튜브도 게임의 3D 장면으로 옮겼습니다.
 

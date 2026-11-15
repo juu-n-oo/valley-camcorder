@@ -193,6 +193,12 @@
     const boxes=[];
     const meshes=Valley.lodging.model(scene,part=>draw({
       at:a.at,yaw:a.yaw,
+      blender(name,at,options) {
+        Valley.lodging.appendModel(part,name,scene.material,minus(at,origin),options);
+      },
+      body(at,size,kind,hit=kind) {
+        boxes.push({at,size,yaw:0,kind,hit,stair:0});
+      },
       box(material,at,size,tint,{radius=0,yaw=0,kind,stair=0,stepBank}={}) {
         part(material).box(minus(at,origin),size,tint,radius,yaw ? [0,yaw,0] : null);
         if(kind) boxes.push({at,size,yaw,kind,stair,stepBank});
@@ -206,8 +212,8 @@
     }));
     const item=Valley.lodging.fixture(scene,a,type,origin,0,meshes);
     if(type==="woodFloor" || type==="woodStair") item.timber=[];
-    for(const {at,size,yaw,kind,stair,stepBank} of boxes) {
-      const bounds=scene.collider(...a.at(at),size,a.yaw+yaw,kind,kind,0,stair,stepBank);
+    for(const {at,size,yaw,kind,hit=kind,stair,stepBank} of boxes) {
+      const bounds=scene.collider(...a.at(at),size,a.yaw+yaw,kind,hit,0,stair,stepBank);
       bounds.fixture=item;
       if(kind==="wood") item.timber?.push(bounds);
     }

@@ -5,7 +5,9 @@
   const gaussian = (x, z, cx, cz, sx, sz) => Math.exp(-(((x-cx)/sx)**2 + ((z-cz)/sz)**2));
   const { within, waterLevel, waterStation, weir, layout, bank, center, width, shoreDistance, mapScale } = Valley.roadLayout;
   const shore = (x, z) => shoreDistance(x,z)
-    + .41*Math.sin(z*.258+x*.22) + .18*Math.sin(z*.81-x*.26);
+    + .36*Math.sin(z*.202+x*.21) + .14*Math.sin(z*.81-x*.26)
+    + .73*gaussian(x-center(z),z,-13,7,14,21)
+    - .56*gaussian(x-center(z),z,14,-28,12,22);
   const trail = layout();
 
   function naturalHeight(x, z, s) {
@@ -18,15 +20,19 @@
     if (s < 0) {
       const depth = -s;
       const ford = .84*Math.exp(-(((z-36)/10.5)**2));
-      const riffles = Math.sin(x*.96+z*.53)*Math.cos(z*.38-x*.26)*.095;
+      const gravelBar = .56*gaussian(u,z,-7,8,8,16)+.35*gaussian(u,z,9,-40,7,20);
+      const riffles = (.066*Math.sin(z*.57+x*.26+.7*Math.sin(x*.48))+.036*Math.cos(z*1.21-x*.32))
+        *smooth(.3,2.6,depth);
       const pool = (1.82*gaussian(u,z,-2,-15,15,49)+.67*gaussian(u,z,5,-62,12,37))
         *smooth(2.7,9,depth)*(1-smooth(15,28,z));
       return -.033 - .30*(1-Math.exp(-depth*.72))
         - (1.30-ford)*(1-Math.exp(-depth*depth*.033))
-        + riffles * smooth(0,2.5,depth) - pool + divide;
+        + riffles + gravelBar*smooth(.46,2.5,depth) - pool + divide;
     }
-    const swell = .08*Math.sin(x*.85+z*.36) + .065*Math.cos(z*.91-x*.32);
-    const beach = .035 + .215*(1-Math.exp(-s*.64)) + .034*s + swell*smooth(0,2,s);
+    const swell = .056*Math.sin(x*.79+z*.36) + .045*Math.cos(z*.91-x*.32);
+    const gravelBench = .34*gaussian(u,z,-20,8,13,28)+.27*gaussian(u,z,18,-49,12,20);
+    const beach = .034 + .235*(1-Math.exp(-s*.64)) + .035*s
+      + (swell+gravelBench)*smooth(.12,3.2,s);
     const ridge = 64*gaussian(u,z,-103,-90,70,136) + 99*gaussian(u,z,-151,-243,97,123)
       + 68*gaussian(u,z,102,-67,76,121) + 94*gaussian(u,z,151,-236,93,132)
       + 60*gaussian(u,z,-109,108,78,103)+49*gaussian(u,z,94,134,66,119)
@@ -38,8 +44,11 @@
       + 23*gaussian(u,z,51,225,43,86)+25*gaussian(u,z,-59,273,39,87);
     const ravines = 4.2*Math.sin(z*.069+u*.105)+3.0*Math.sin(z*.151-u*.058)+1.18*Math.cos(z*.34+u*.20);
     const foothills=(ridge+folds*.27)*mix(.22,.53,smooth(72,184,s))*smooth(12,100,s);
-    const rolls=(shoulders*.24+ravines*.14)*smooth(6,42,s);
-    return beach+foothills+rolls+divide;
+    const erosion = .65*Math.sin(u*.19-z*.232+.86*Math.sin(z*.051+u*.03));
+    const rolls=(shoulders*.24+(ravines+erosion)*.16)*smooth(6,42,s);
+    const forestRidge=(26*gaussian(u,z,38,-30,23,29)+11*gaussian(u,z,34,-46,18,16))
+      *smooth(2,22,s)*smooth(0,11,u);
+    return beach+foothills+rolls+forestRidge+divide;
   }
 
   function height(x,z) {
@@ -190,8 +199,9 @@
     const choice=rng(), tilt=(rng()-.5)*.19;
     // Preserve the terrain generator's seeded placements when swapping the mesh.
     for(let i=0;i<55;i++) rng();
+    const largeShelf=Math.max(rx,rz)>.90 && ry<Math.min(rx,rz)*.63 && choice<.88;
     const variety=ry<Math.min(rx,rz)*.59 && choice<.64 ? "river" : ["ledge","weathered","cleft"][Math.floor(choice*3)];
-    const name="granite_"+variety;
+    const name=largeShelf ? "river_shelf_"+Math.floor(choice*3) : "granite_"+variety;
     const co = Math.cos(angle), si = Math.sin(angle);
     const matrix=[rx*co,ry*tilt,rx*si,0, rx*shear*co-rz*.055*si,ry,rx*shear*si+rz*.055*co,0,
       -rz*si,0,rz*co,0,...at,1];
@@ -234,13 +244,13 @@
   function rocks(rng, tileAt, blocks, colliders) {
     const pink = rgb(0xd1bdb0), gray = rgb(0xd6d6ce), cool = rgb(0xb8c0b7);
     const palette = [pink, gray, cool, [1,1,1], [1,1,.99]];
-    // The joints follow the right bank, with a few detached towers in front.
+    // The outcrop follows the right bank, with darker rock recessed between the projecting slabs.
     const pillars = [
-      [-46,4.1,2.6,3.9,9.6], [-43,2.6,1.9,2.7,7.5], [-39,4.4,2.3,3.1,13.2],
-      [-36.6,2.55,1.7,2.2,11.7], [-33.9,2.9,1.62,2.2,19.9], [-31.1,2.3,1.41,2.1,18.4],
-      [-28.3,2.45,1.30,2.0,15.7], [-25,4.7,2.5,3.4,10.2], [-20,3.9,2.0,2.5,7.7],
-      [-17,1.8,1.5,2.1,4.3], [-13,3.2,2.8,2.8,5.7], [-37,7.9,4.1,5.5,17.3],
-      [-29,8.1,3.6,4.6,15.4], [-22,7.3,3.9,3.7,11.0]
+      [-45,4.1,2.7,3.8,6.7], [-42.9,2.6,2.4,3.2,8.2], [-39.0,4.4,2.4,3.4,12.1],
+      [-36.6,2.97,2.0,2.7,10.6], [-33.7,3.4,2.2,2.85,15.3], [-30.1,2.5,2.3,2.7,20.3],
+      [-27.6,3.27,2.4,3.1,17.7], [-24.5,5.0,3.2,3.8,12.1], [-21.7,3.9,2.2,2.5,6.8],
+      [-18.7,2.7,2.2,2.8,3.8], [-15.6,4.7,2.4,3.3,4.6], [-37.0,8.0,4.8,5.7,13.7],
+      [-29.1,7.6,4.4,5.2,18.6], [-22.5,7.5,4.8,5.1,10.7]
     ];
     const ledges = [];
     for(const [pick,[station,offset,rx,rz,peak]] of pillars.entries()) {
@@ -256,13 +266,20 @@
         y += layer*.963;
       }
       const half=(y-base)*.5,s=Math.sin(rotation),c=Math.cos(rotation);
-      const matrix=[rx*c,0,rx*s,0,0,half,0,0,-rz*s,0,rz*c,0,x,base+half,z,1];
-      const tint=pick%3===0 ? [1.16,1.10,1.03] : pick%3===1 ? [1.12,1.12,1.08] : [1.07,1.10,1.09];
+      const lean = Math.sin(pick*1.62)*rx*.26;
+      const matrix=[rx*c,0,rx*s,0,lean,half,rz*.10,0,-rz*s,0,rz*c,0,x,base+half,z,1];
+      const tint = pick>=11 ? [.77,.82,.80] : pick%3===0 ? [1.025,1.00,.98]
+        : pick%3===1 ? [.95,.96,.97] : [.89,.92,.92];
       const collision=stampStone(stone,"cliff_face_"+pick%3,matrix,tint,colliders);
       const tx=x+rx*.1, start=collision.max[1]+1, end=collision.min[1]-.1;
       const safeTop=meshHit([collision],[tx,start,z],[tx,end,z],[0,end-start,0],1,"rock")?.at[1]??y;
       blocks.push({ x,z,rx:rx*.91,rz:rz*.93,top:y });
       ledges.push([tx,safeTop-.13,z,rx]);
+      if (pick>=11) {
+        const sx=x+rx*.62, sz=z-rz*.54;
+        const shelf=meshHit([collision],[sx,start,sz],[sx,end,sz],[0,end-start,0],1,"rock");
+        if (shelf) ledges.push([sx,shelf.at[1]-.13,sz,rx*.73]);
+      }
     }
     const near = [
       [-1,15,6.4,1.38,.65,1.07], [-1,11,2.1,1.07,.43,.79], [-1,-6,1.1,1.59,.74,1.23],
@@ -299,7 +316,6 @@
   }
 
   function tree(rng, bark, leaves, x, z, y, h, dense, woodColliders, recordTree) {
-    const first=bark.indices.length;
     const radius = h*(.013+rng()*.010);
     const leanX = (rng()-.5)*h*.19, leanZ = (rng()-.5)*h*.16;
     const trunk = rgb(rng()<.5 ? 0xadad9d : 0xbab6a7);
@@ -307,8 +323,20 @@
     const top = [x+leanX,y+h*.90,z+leanZ];
     const fork = [x+leanX*.52,y+h*.47,z+leanZ*.51];
     const root=[x,y-.27,z];
-    bark.cylinder(root,fork,radius,radius*.70,trunk,7,false);
-    bark.cylinder(fork,top,radius*.70,radius*.16,trunk,6,false);
+    if (dense) {
+      const {get,append}=Valley.blenderAssets;
+      const model=get(leanX<0 ? "river_pine_0" : "river_pine_1");
+      const angle=Math.atan2(leanZ,leanX), co=Math.cos(angle), si=Math.sin(angle);
+      const span=minus(top,root);
+      const matrix=[radius*co,0,radius*si,0,...span,0,-radius*si,0,radius*co,0,...root,1];
+      append(bark,model.parts[0].shape,matrix,trunk);
+    }
+    const collision=woodColliders && dense ? new Builder() : bark;
+    const first=collision.indices.length;
+    if (!dense || woodColliders) {
+      collision.cylinder(root,fork,radius,radius*.70,trunk,7,false);
+      collision.cylinder(fork,top,radius*.70,radius*.16,trunk,6,false);
+    }
     const angle = rng()*6.283;
     for (let i = 0; i < (dense ? 5 : 3); i++) {
       const p = angle + i*2.4;
@@ -316,13 +344,17 @@
       const topY = i===0 ? h*.94 : h*(.49+rng()*.35);
       const at = [x+leanX*.75+Math.cos(p)*h*spread,y+topY,z+leanZ*.75+Math.sin(p)*h*spread];
       const wide = h*(.47+rng()*.30), high = wide*(.46+rng()*.22);
-      if (i) bark.cylinder(fork,[at[0],at[1]-.07*h,at[2]],radius*.48,radius*.07,trunk,5,false);
+      if (i) {
+        const tip=[at[0],at[1]-.07*h,at[2]];
+        bark.cylinder(fork,tip,radius*.48,radius*.07,trunk,5,false);
+        if (dense && woodColliders) collision.cylinder(fork,tip,radius*.48,radius*.07,trunk,5,false);
+      }
       const tint = times(hue,(i===0 ? 1.07 : .87)+rng()*.17);
       canopy(leaves,at,wide,high,p,tint,high*.10);
       canopy(leaves,at,wide*.92,high*.95,p+Math.PI*.48,tint,high*-.16);
       if (dense) canopy(leaves,[at[0],at[1]+high*.13,at[2]],wide*.94,high*.70,p+.77,tint,high*.44);
     }
-    if (woodColliders) woodColliders.push(meshCollider(bark,first));
+    if (woodColliders) woodColliders.push(meshCollider(collision,first));
     recordTree(x,y,z,h,leanX,leanZ,{root,tip:fork,base:radius,end:radius*.70,sides:7});
     return radius;
   }
@@ -567,6 +599,16 @@
       const [x,y,z,radius] = ledges[i];
       const {stems,crowns}=tileAt(x,z);
       if (i%3 !== 1) tree(rng,stems,crowns,x,z,y,2.8+radius*.61,true,woodColliders,recordTree);
+    }
+    const ridgeTrees=random(20010818);
+    for (let station=-58;station<=-12;station+=3.5) for(let offset=7.0;offset<=32;offset+=3.2) {
+      const z=(station+(ridgeTrees()-.5)*2.72)*mapScale;
+      const x=bank(z,1)+offset+(ridgeTrees()-.5)*2.15;
+      const y=height(x,z);
+      if(y<4.8 || intersects(x,z) || trail.clear(x,z,.88)) continue;
+      const {stems,crowns}=tileAt(x,z), h=mix(3.5,6.7,ridgeTrees());
+      const r=tree(ridgeTrees,stems,crowns,x,z,y,h,false,woodColliders,recordTree);
+      blocks.push({x,z,rx:r*1.14,rz:r*1.14,top:y+h*.74,tree:true});
     }
     for(let i=0;i<158;i++) {
       const z=mix(-72,81,rng()), side=rng()<.43 ? -1 : 1;

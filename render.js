@@ -250,12 +250,12 @@ globalThis.Valley = (() => {
     void main() {
       vec3 d = normalize(uAxes * vec3((uv*2.0-1.0)*uFrustum, 1.0));
       d.y *= uMirror;
-      vec3 sky = mix(vec3(.929,.939,.947), vec3(.74,.81,.87), smoothstep(-.02,.82,d.y));
+      vec3 sky = mix(vec3(.918,.925,.910), vec3(.661,.742,.785), smoothstep(-.02,.82,d.y));
       vec2 p = d.xz / max(.16, .24+d.y) * 3.0 + vec2(uTime*.007, .7);
       float clouds = noise(p)*.65 + noise(p*2.07)*.24 + noise(p*4.21)*.11;
       sky = mix(sky, vec3(.973,.969,.944), smoothstep(.33,.75,clouds)*.73);
       float glare = pow(max(0.0,dot(d, normalize(vec3(-.57,.69,-.43)))), 10.0);
-      sky += vec3(.10,.082,.045)*glare;
+      sky += vec3(.064,.053,.038)*glare;
       vec3 water = mix(vec3(.126,.177,.125),vec3(.36,.41,.28),smoothstep(-.62,.78,d.y));
       pixel = vec4(mix(sky,water,uSubmerged), 1);
     }`;
@@ -415,8 +415,10 @@ globalThis.Valley = (() => {
     uniform float uSubmerged;
     uniform sampler2D uSand;
     uniform sampler2D uStone;
+    uniform sampler2D uLeafLitter;
     uniform sampler2D uBark;
     uniform sampler2D uLeaves;
+    uniform highp sampler2DArray uFinishes;
     uniform sampler2D uFabric;
     uniform sampler2D uVinyl;
     uniform sampler2D uSkin;
@@ -429,9 +431,19 @@ globalThis.Valley = (() => {
     ${hashGLSL}
 
     vec3 rock(vec3 p, vec3 n) {
+      p.y += p.x*.17+p.z*.10;
       vec3 w = pow(abs(n), vec3(3.0));
       w /= max(.01, w.x+w.y+w.z);
-      return texture(uStone,p.zy*.56).rgb*w.x + texture(uStone,p.xz*.56).rgb*w.y + texture(uStone,p.xy*.56).rgb*w.z;
+      return texture(uStone,p.zy*vec2(.52,.32)).rgb*w.x
+        + texture(uStone,p.xz*.54).rgb*w.y + texture(uStone,p.xy*vec2(.52,.32)).rgb*w.z;
+    }
+
+    vec2 faceUV(vec3 p, vec3 n) {
+      return abs(n.y)>.63 ? p.xz : vec2(abs(n.x)>abs(n.z) ? p.z : p.x,p.y);
+    }
+
+    vec3 finish(vec2 uv, float layer) {
+      return texture(uFinishes,vec3(uv,layer)).rgb;
     }
 
     float cameraStamp(vec2 uv) {
@@ -501,21 +513,19 @@ globalThis.Valley = (() => {
       if (uMaterial == 1) {
         float wet = 1.0-smoothstep(-.11,.34,vP.y);
         vec2 bend = vec2(sin(vP.z*5.4-uTime*1.9),sin(vP.x*4.1+uTime*2.3))*.014;
-        vec2 grain = vP.xz*.55+bend*step(vP.y,-.004);
+        vec2 grain = vP.xz*.72+bend*step(vP.y,-.004);
         vec3 fine = texture(uSand,grain).rgb;
         vec3 coarse = texture(uSand,vec2(grain.y,-grain.x)*.78+vec2(.27,.53)).rgb;
         float grainBlend = noise(vP.xz*.36);
         vec3 sand = mix(fine,coarse,smoothstep(.24,.76,grainBlend)*.70);
         float mottling = noise(vP.xz*.29)*.20+.91;
-        vec3 ground = sand * vec3(1.09,1.065,1.015) * mottling;
+        vec3 ground = sand * vec3(1.14,1.11,1.052) * mottling;
         if (vUV.x > .001) {
-          float shade = .59+.22*noise(vP.xz*.17)+.19*grainBlend;
-          vec2 litterUV = vP.xz*vec2(13.1,22.4);
-          float chaff = smoothstep(.58,.79,noise(litterUV + .29*vP.y));
-          float loam = dot(sand,vec3(.299,.587,.114));
-          vec3 soil = mix(vec3(.153,.104,.068),vec3(.446,.331,.213),loam);
-          float mulch = noise(vP.xz*vec2(2.81,4.76))*.18;
-          soil = (soil+vec3(.113,.075,.039)*(chaff+mulch))*shade;
+          vec2 litterUV = vP.xz*.81;
+          vec3 litter = texture(uLeafLitter,litterUV).rgb;
+          vec3 brokenLeaves = texture(uLeafLitter,vec2(litterUV.y,-litterUV.x)*.62).rgb;
+          float shade = .77+.24*noise(vP.xz*.17)+.15*grainBlend;
+          vec3 soil = mix(litter,brokenLeaves,grainBlend*.68)*shade;
           ground = mix(ground,soil,vUV.x);
         }
         c *= ground;
@@ -525,23 +535,23 @@ globalThis.Valley = (() => {
             vec2 p = vP.xz;
             float a = sin(p.x*6.3+p.y*4.0 + sin(p.y*7.1+uTime*1.8)*1.6-uTime);
             float b = sin(p.y*7.0-p.x*3.3+sin(p.x*5.0-uTime)*1.8+uTime*1.3);
-            float caustic = pow(1.0-abs(a*b), 12.0)*.17*exp(vP.y*mix(1.70,.59,uSubmerged));
+            float caustic = pow(1.0-abs(a*b), 12.0)*.115*exp(vP.y*mix(1.70,.59,uSubmerged));
             c += vec3(.89,.87,.59)*caustic;
           }
         }
         c *= ambient + diffuse*.34;
       } else if (uMaterial == 2) {
-        float stratum = .88 + .22*noise(vec2(vP.y*2.1 + vP.z*.12, vP.x*.2));
+        float stratum = .83 + .25*noise(vec2(vP.y*.93 + vP.z*.17, vP.x*.23));
         float stain = smoothstep(.51,.80,noise(vP.xz*.32 + vP.y*.18));
         float lichen = smoothstep(.52,.78,noise(vP.xz*.64+vec2(vP.y*.41)))*(.27+.73*max(n.y,0.0));
         c *= rock(vP,n)*stratum*mix(vec3(1.07,1.01,.99),vec3(.58,.69,.47),stain*.37+lichen*.38);
-        float fault = smoothstep(.77,.88,noise(vec2(vP.z*3.8+vP.x*2.1 + .14*sin(vP.y*2.3),vP.y*.39)));
-        float seam = 1.0-smoothstep(.018,.073,abs(fract(vP.y*2.61+vP.x*.103+vP.z*.077+stratum*.46)-.50));
-        seam *= (1.0-abs(n.y))*(.22+.78*stain);
+        float fault = smoothstep(.70,.89,noise(vec2(vP.z*3.8+vP.x*2.1 + .54*sin(vP.y*.87),vP.y*.26)));
         float damp = mix(.56,1.0,smoothstep(-.10,.66,vP.y));
-        c *= (.58 + diffuse*.83) * damp * (1.0-fault*.43-seam*.26);
+        c *= (.61 + diffuse*.81) * damp * (1.0-fault*.31);
       } else if (uMaterial == 3) {
-        c *= texture(uBark, vec2(vUV.x*1.5, vP.y*.65)).rgb*(.58 + diffuse*.46);
+        vec2 barkUV=vec2(vUV.x, vP.y*.52);
+        vec3 bark=texture(uBark,barkUV).rgb;
+        c *= bark*(.74 + diffuse*.52);
       } else if (uMaterial == 4) {
         vec4 leaf = texture(uLeaves,vUV);
         if (leaf.a < .45) discard;
@@ -553,8 +563,10 @@ globalThis.Valley = (() => {
         float fibers = noise(vP.xz*vec2(44.0,96.0));
         c *= (.75+diffuse*.22)*(.83+fibers*.23);
       } else if (uMaterial == 13) {
-        vec3 grain = texture(uBark,vec2(vP.x*2.7,vP.z*.59)).rgb;
-        c *= (.53+grain*.86)*(.61+.42*diffuse);
+        vec2 uv = faceUV(vP,n);
+        vec3 grain = finish(uv*vec2(2.14,.48),0.0);
+        float patina = .88+.18*noise(uv*vec2(1.49,.78));
+        c *= (.54+grain*.69)*patina*(.64+.43*diffuse);
       } else if (uMaterial == 6) {
         float rim = pow(1.0-abs(dot(n,toward)),3.0);
         float line = pow(max(0.0,sin(vLocal.x*48.0+vLocal.z*9.0)),20.0);
@@ -627,7 +639,11 @@ globalThis.Valley = (() => {
         float joint = 1.0-smoothstep(.027,.048+max(aa.x,aa.y)*.60,min(edge.x,edge.y));
         float worn = noise(vP.xz*1.23+vP.y*.71)*.13 + noise(vP.xz*51.0+vP.y*38.0)*.08;
         float shade = .76+.18*hash(cell)+worn;
+        vec2 face=faceUV(vP,n);
+        vec3 fired=finish(face*vec2(3.7,5.1),2.0);
+        float grit=dot(fired,vec3(.299,.587,.114));
         vec3 block = brick ? c*shade*vec3(1.045,.91,.80) : c*shade*mix(vec3(.92,.88,.81),vec3(1.04,1.02,.94),hash(cell+.45));
+        block *= .69+grit*.65;
         vec3 mortar = brick ? vec3(.48,.444,.397) : vec3(.42,.40,.354);
         c = mix(block,mortar,joint*(1.0-smoothstep(.32,1.0,max(aa.x,aa.y)))*.72);
         c *= ambient+diffuse*.29;
@@ -639,9 +655,10 @@ globalThis.Valley = (() => {
         float moisture = noise(q*.35+vec2(.17,-.22))*.16;
         c *= (.65+aggregate*.32+spots-moisture)*(ambient+diffuse*.34)*(asphalt ? .86 : 1.03);
       } else if (uMaterial == 25) {
-        vec2 q = abs(n.y)>.6 ? vP.xz : vec2(abs(n.x)>abs(n.z) ? vP.z : vP.x,vP.y);
-        float grain = noise(q*81.0)*.065 + noise(q*2.7)*.048;
-        c *= (.91+grain)*(.87+.20*diffuse);
+        vec2 q = faceUV(vP,n);
+        vec3 plaster = finish(q*1.22,1.0);
+        float wash = .90+noise(q*.76)*.12+noise(q*8.0)*.05;
+        c *= (.47+plaster*.73)*wash*(.88+.19*diffuse);
       } else if (uMaterial == 39 || uMaterial == 40 || uMaterial == 41 || uMaterial == 45) {
         vec3 face = dot(n,toward)<0.0 ? -n : n;
         vec3 reflected = reflect(-toward,face);
@@ -722,13 +739,14 @@ globalThis.Valley = (() => {
         vec2 q=vUV*vec2(6.9,1.33);
         q.y+=hash(vec2(floor(q.x),7.1))*.93;
         vec2 d=.5-abs(fract(q)-.5);
-        float grain=noise(vUV*vec2(130.0,6.2))+noise(vUV*vec2(243.0,15.4))*.46;
+        float timber=hash(floor(q));
+        vec3 grain=finish(vec2(q.x*.48+timber,q.y*.82-timber*.59),0.0);
         float feather=clamp(max(fwidth(q.x),fwidth(q.y)),.008,.053);
         float joint=1.0-smoothstep(.004,.018+feather,min(d.x,d.y));
         float gloss=pow(max(0.0,dot(n,normalize(light+toward))),23.0);
         float sheen=pow(1.0-max(dot(n,toward),0.0),3.6);
-        c *= (.87+.12*hash(floor(q))+.092*grain)*(1.0-.16*joint);
-        c += vec3(.19,.16,.12)*gloss+vec3(.045,.043,.037)*sheen;
+        c *= (.65+.11*timber+grain*.46)*(1.0-.24*joint);
+        c += vec3(.15,.13,.105)*gloss+vec3(.045,.043,.037)*sheen;
       } else if (uMaterial == 27) {
         vec2 p=vec2(abs(n.x)>abs(n.z) ? vP.z : vP.x,vP.y)*vec2(3.8,3.35);
         vec2 q=fract(p)-.5;
@@ -755,7 +773,8 @@ globalThis.Valley = (() => {
         if(bathFloor) pattern+=mix(-.14,.13,step(q.x,q.y)*.72+mod(cell.x+cell.y,2.0)*.28);
         if(diningFloor) pattern+=(noise(p*13.8)-.5)*.14;
         float glaze=pow(max(0.0,dot(n,normalize(light+toward))),44.0);
-        c *= (.90+.065*hash(cell)+pattern+noise(p*9.6)*.073)*(.89+.18*diffuse);
+        vec3 glazeBody=finish(q*.79+vec2(hash(cell),hash(cell+.61)),3.0);
+        c *= (.55+.065*hash(cell)+pattern+glazeBody*.49)*(.89+.18*diffuse);
         c=mix(c,bathFloor ? vec3(.71,.70,.65) : c*.67,grout*.68);
         c+=vec3(.22,.24,.25)*glaze*(1.0-grout);
       } else if (uMaterial == 29) {
@@ -877,12 +896,13 @@ globalThis.Valley = (() => {
     void main() {
       vec2 p = vP.xz;
       float t = uTime;
-      float warp = noise(p*.56 + vec2(t*.054,-t*.04))*4.3;
-      float eddies = noise(p*vec2(.78,1.01) + vec2(-t*.119,t*.14));
-      float broad = sin(dot(p,vec2(1.32,2.79)) + t*1.7 + warp);
-      float shortWave = sin(dot(p,vec2(-3.71,7.0)) - t*2.4 + broad*1.49 + warp*.45+eddies*1.72);
-      float catspaw = sin(dot(p,vec2(7.7,10.2)) + t*3.0 + sin(p.x*4.1-p.y*3.8)*.8+eddies*2.31);
-      vec2 slant = vec2(.038,.094)*broad + vec2(-.061,.054)*shortWave + vec2(.048,.042)*catspaw;
+      vec2 drift = vec2(-t*.018,t*.36);
+      float warp = noise(p*vec2(.32,.62) + drift*.42)*3.5;
+      float eddies = noise(p*vec2(.66,1.09) + drift);
+      float broad = sin(dot(p,vec2(.79,3.84)) + t*1.52 + warp);
+      float shortWave = sin(dot(p,vec2(-1.31,8.74)) + t*3.36 + broad*.67 + warp*.82+eddies*2.29);
+      float catspaw = sin(dot(p,vec2(3.35,15.01)) + t*4.73 + eddies*3.4 + warp);
+      vec2 slant = vec2(.027,.086)*broad + vec2(-.027,.059)*shortWave + vec2(.022,.038)*catspaw;
       float ring = 0.0, trough = 0.0, froth = 0.0;
       float footprint = max(length(dFdx(p)),length(dFdy(p)));
       float detail = 1.0-smoothstep(.085,.31,footprint);
@@ -936,15 +956,15 @@ globalThis.Valley = (() => {
       vec2 bent = clamp(uv + slant * (.098+.067*grazing), vec2(.002), vec2(.998));
       vec3 mirrored = texture(uReflection, bent).rgb;
       float deep = max(0.0,-vBed);
-      vec3 body = mix(vec3(.56,.502,.326),vec3(.223,.265,.135),smoothstep(.03,1.72,deep));
+      vec3 body = mix(vec3(.521,.483,.327),vec3(.178,.216,.113),smoothstep(.03,1.42,deep));
       body *= .90+.16*eddies;
       float mirroredLuma = dot(mirrored,vec3(.299,.587,.114));
-      mirrored = mix(mirrored,vec3(mirroredLuma),.22)*vec3(.99,.997,.92);
+      mirrored = mix(mirrored,vec3(mirroredLuma),.19)*vec3(.91,.95,.82);
       vec3 color = mix(body,mirrored,clamp(fresnel+.102,0.0,.92));
       vec3 halfLight = normalize(v+normalize(vec3(-.57,.69,-.43)));
-      float glint = pow(max(0.0,dot(n,halfLight)),110.0);
-      float skyBreak = pow(max(0.0,shortWave*.51+catspaw*.31+broad*.18),5.6) * pow(grazing,.51);
-      float patchLight = smoothstep(.26,.81,noise(p*.43+vec2(t*.052,0)));
+      float glint = pow(max(0.0,dot(n,halfLight)),140.0);
+      float skyBreak = smoothstep(.42,.87,shortWave*.69+catspaw*.23+broad*.17)*pow(grazing,.52);
+      float patchLight = smoothstep(.27,.73,noise(p*vec2(.83,.52)+drift*.26));
       float lip = exp(-abs(vBed + .015)*34.0);
       float shoreFoam = lip * smoothstep(.49,.88,noise(p*8.8+vec2(t*.43,-t*.35))) * (.52+.48*broad);
       float bubbles = 0.0;
@@ -952,7 +972,7 @@ globalThis.Valley = (() => {
         bubbles = froth*smoothstep(.30,.75,noise(p*12.3+vec2(t*.72,-t*.53)))*(.66+.34*broad);
       }
       color *= 1.0-min(.27,trough);
-      color += vec3(.93,.96,.94)*(glint*.58 + skyBreak*(.16+.45*patchLight) + min(.77,ring) + shoreFoam*.34 + bubbles*.70);
+      color += vec3(.93,.96,.91)*(glint*.37 + skyBreak*(.075+.25*patchLight) + min(.77,ring) + shoreFoam*.31 + bubbles*.70);
       float alpha = clamp(.10 + (1.0-exp(-deep*1.60))*.56 + fresnel*.40 + min(.60,ring)*.72 + shoreFoam*.29 + bubbles*.37, .10, .98);
       pixel = vec4(color,alpha);
     }`;
@@ -1104,13 +1124,13 @@ globalThis.Valley = (() => {
         +texture(uScene,p+dx*2.05).rgb*.24;
       const vec3 weights = vec3(.299,.587,.114);
       float luma = dot(signal,weights);
-      float contrast = mix(luma,smoothstep(.050,.914,luma),.37);
-      vec3 c = vec3(contrast)+(colors-dot(colors,weights))*.86;
+      float contrast = mix(luma,smoothstep(.038,.929,luma),.39);
+      vec3 c = vec3(contrast)+(colors-dot(colors,weights))*.91;
       float nearbyLight = dot(vertical*.60+(left+right)*.20,weights);
       c += vec3(.118,.105,.082)*max(nearbyLight-luma,0.0)*smoothstep(.69,.98,nearbyLight);
       c.r += (right.r-left.r)*.073;
       c.b -= (right.b-left.b)*.077;
-      c *= vec3(1.015,1.009,.998);
+      c *= mix(vec3(.979,1.012,.982),vec3(1.021,1.014,.995),smoothstep(.22,.60,luma));
       float fine = hash(vec2(floor(uv.x*tape.x),line)+vec2(frame*7.17,frame*.37))-.5;
       float chroma = hash(vec2(floor(uv.x*tape.x*.44),floor(line*.5))+frame*.63)-.5;
       float raster = (mod(line+mod(frame,2.0),2.0)-.5)*.007;
@@ -1261,8 +1281,9 @@ globalThis.Valley = (() => {
     }
 
     async loadTextures(sources) {
-      const [atlas, leaf, surfaces] = await Promise.all([
-        loadImage(sources.materials),loadImage(sources.foliage),loadImage(sources.camcorder)
+      const [atlas, leaf, surfaces, finishes] = await Promise.all([
+        loadImage(sources.location||sources.materials),loadImage(sources.foliage),loadImage(sources.camcorder),
+        loadImage(sources.finishes||sources.materials)
       ]);
       const tile = document.createElement("canvas");
       const context = tile.getContext("2d");
@@ -1277,6 +1298,25 @@ globalThis.Valley = (() => {
       tile.width = 1024; tile.height = 512;
       context.drawImage(leaf, 0, 0, tile.width, tile.height);
       this.textures.push(this.texture(tile, false));
+
+      const {gl}=this, half=Math.floor(finishes.width/2);
+      const target=gl.TEXTURE_2D_ARRAY;
+      tile.width=tile.height=half;
+      this.finishTextures=gl.createTexture();
+      gl.bindTexture(target,this.finishTextures);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+      gl.texStorage3D(target,1+Math.floor(Math.log2(half)),gl.RGBA8,half,half,4);
+      for(let layer=0;layer<4;layer++) {
+        const x=(layer%2)*half, y=Math.floor(layer/2)*half;
+        context.drawImage(finishes,x,y,half,half,0,0,half,half);
+        const rgba=context.getImageData(0,0,half,half).data;
+        gl.texSubImage3D(target,0,0,0,layer,half,half,1,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(rgba.buffer));
+      }
+      gl.generateMipmap(target);
+      gl.texParameteri(target,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(target,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(target,gl.TEXTURE_WRAP_S,gl.MIRRORED_REPEAT);
+      gl.texParameteri(target,gl.TEXTURE_WRAP_T,gl.MIRRORED_REPEAT);
     }
 
     target(w, h, old) {
@@ -1384,7 +1424,7 @@ globalThis.Valley = (() => {
       const {gl}=this;
       this.meshViewUniforms(u);
       gl.uniform1i(u.uHand, +held);
-      for (const [i, name] of [[0,"uSand"],[1,"uStone"],[3,"uBark"],[4,"uLeaves"]]) {
+      for (const [i, name] of [[0,"uSand"],[1,"uStone"],[2,"uLeafLitter"],[3,"uBark"],[4,"uLeaves"]]) {
         this.bindTexture(i, this.textures[i]);
         gl.uniform1i(u[name], i);
       }
@@ -1400,6 +1440,9 @@ globalThis.Valley = (() => {
       gl.uniform1i(u.uCctv,13);
       this.bindTexture(14,this.lobbyPrint || this.textures[0]);
       gl.uniform1i(u.uLobbyPrint,14);
+      gl.activeTexture(gl.TEXTURE0+15);
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY,this.finishTextures);
+      gl.uniform1i(u.uFinishes,15);
     }
 
     draw(mesh, matrix = identity, belt = 0, effect = null, u = this.programs.mesh.uniforms) {

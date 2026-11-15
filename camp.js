@@ -146,34 +146,6 @@
     return model;
   }
 
-  function cup(tint) {
-    const model=parts(plastic);
-    const [{shape}]=model, color=rgb(tint);
-    shape.cylinder([0,0,0],[0,.104,0],.030,.043,color,22,false);
-    shape.cylinder([0,.018,0],[0,.102,0],.028,.039,times(color,.77),22,false);
-    shape.cylinder([0,0,0],[0,.012,0],.030,.031,times(color,.87),20);
-    shape.cylinder([0,.100,0],[0,.106,0],.043,.044,times(color,1.07),22,false);
-    return model;
-  }
-
-  function lunchBox() {
-    const model=parts(plastic), [{shape}]=model;
-    shape.box([0,.058,0],[.295,.114,.208],rgb(0xcfd4d1),.020);
-    shape.box([0,.122,0],[.306,.022,.218],rgb(0xedecdd),.009);
-    shape.box([0,.067,.113],[.050,.043,.015],rgb(0x9bb7b9),.006);
-    return model;
-  }
-
-  function flask() {
-    const model=parts(plastic,metal);
-    const [{shape:shell},{shape:cap}]=model, body=rgb(0xa0afb2), lid=rgb(0x474c50);
-    shell.cylinder([0,0,0],[0,.222,0],.052,.054,body,24);
-    shell.cylinder([0,.015,0],[0,.028,0],.055,.054,times(body,.81),24,false);
-    shell.cylinder([0,.205,0],[0,.233,0],.055,.050,lid,22);
-    cap.cylinder([0,.230,0],[0,.258,0],.051,.048,rgb(0xd3d5ce),24);
-    return model;
-  }
-
   function duffelBag() {
     return Valley.blenderAssets.shapes("canvas_duffel",{fabric,gloss:15});
   }
@@ -338,7 +310,9 @@
     const farShade=umbrella([0x4275a7,0xcfcaae,0x4275a7,0xcfcaae],1.02,.06);
     const yellow=chair(0xe5b739), navy=chair(0x315b75), charcoal=chair(0x383b3b);
     const blueTable=picnicTable();
-    const food=lunchBox(), tea=flask(), yellowCup=cup(0xd7ba61), paleCup=cup(0xd2d1a0);
+    const {shapes}=Valley.blenderAssets, tableware={plastic,steel:47};
+    const food=shapes("camp_lunch_box",tableware), tea=shapes("camp_flask",tableware);
+    const yellowCup=shapes("camp_cup_yellow",tableware), paleCup=shapes("camp_cup_cream",tableware);
     const lime=tent(0x255ca1,0xa7c956,0x373e4a,1.18,1.16,1.42);
     const family=tent(0x607884,0xb8c77e,0x48544e,1.47,1.43,1.53);
     const red=tent(0x434d60,0x9e4952,0x495556,1.06,1.21,1.40);

@@ -8,6 +8,7 @@
   const switchZ = -.503;
   const switchOffset = position => mix(-.026,.026,position);
   const switchTiming = {touch:.235,flip:.318,lift:.388,end:.67};
+  const thumbRoot=[-.118,-.022,.043], thumbJoints=[[.019,-.021,-.011],[.032,-.027,-.031]];
   const mountZ = -.216;
   const carCount = 5;
   const station = i => -.379-mountZ+i*slot;
@@ -119,7 +120,8 @@
       const z=(i-1.5)*.0185, name="finger_"+i;
       return {root:[-.084,.055,.037+z],tip:[length,.006,z*.18],mesh:meshes(renderer,name)[0],pivots:get(name).pivots};
     });
-    return {palm:meshes(renderer,"open_palm")[0],sleeve,fingers,thumb:meshes(renderer,"thumb")[0]};
+    return {palm:meshes(renderer,"open_palm")[0],sleeve,fingers,thumb:meshes(renderer,"thumb")[0],
+      bindFingers:fingers,skin:meshes(renderer,"support_hand")};
   }
 
   function shell(renderer) {
@@ -363,22 +365,43 @@
     forearm(opaque,toy.sleeve,matrix,rightCuff,side,.247,elbowOut);
   }
 
-  function reach(opaque, hand, matrix, grip, pry = 0, flick = 0, pointing = false, {pinch=0,side=-1,thumb,wristLead,curl=0,ik} = {}) {
-    opaque.push({mesh:hand.palm,matrix,handSide:side});
+  function moveDigit(palette, firstJoint, root, pose, bends) {
+    const inverseBind=transform(times(root,-1));
+    for(let joint=0;joint<3;joint++) {
+      const bent=multiply(pose,bends.subarray(joint*16,(joint+1)*16));
+      palette.set(multiply(bent,inverseBind),(firstJoint+joint)*16);
+    }
+  }
+
+  function reach(opaque, hand, matrix, grip, pry = 0, flick = 0, pointing = false,
+    {pinch=0,side=-1,thumb,wristLead,curl=0,splay=1,extension=Number(pointing),ik} = {}) {
+    const continuous=hand.fingers===hand.bindFingers && !thumb && hand.skin?.length;
+    const palette=continuous ? new Float32Array(16*16) : null;
+    if(palette) palette.set(transform([0,0,0]));
+    else opaque.push({mesh:hand.palm,matrix,handSide:side});
     forearm(opaque,hand.sleeve,matrix,leftCuff,side,wristLead,0,ik);
     const open = 1-grip;
     for (const [i,{mesh,root,pivots}] of hand.fingers.entries()) {
-      const pointingIndex=pointing && i===0;
-      const spread=pointingIndex ? 0 : open, flex=pointingIndex ? 0 : curl*(.85+i*.068);
-      const bend=pointingIndex ? 0 : .23*grip+.48*flex+(i ? .22*pinch : 0);
-      opaque.push({mesh,handSide:side,palette:pivots ? fingerPalette(pivots,bend) : undefined,
-        matrix:multiply(matrix,transform(root,0,spread*(i-1.5)*.077,spread*.66-flex-(i===0 ? 0 : pinch*.64)))});
+      const engaged=i===0 ? 1-extension : 1;
+      const spread=open*engaged, flex=curl*(.85+i*.068)*engaged;
+      const bend=.23*grip*engaged+.48*flex+(i ? .22*pinch : 0);
+      const pose=transform(root,0,spread*(i-1.5)*.077*splay,spread*.66-flex-(i===0 ? 0 : pinch*.64));
+      const bends=pivots ? fingerPalette(pivots,bend) : undefined;
+      if(palette) moveDigit(palette,1+i*3,root,pose,bends);
+      else opaque.push({mesh,handSide:side,palette:bends,matrix:multiply(matrix,pose)});
     }
-    opaque.push(thumb ? {...thumb,handSide:side} : {mesh:hand.thumb,handSide:side,matrix:multiply(matrix,transform(
-      [-.118+.035*pry-.022*flick+.025*pinch+.025*curl,-.022+.024*pry+.054*flick+.027*pinch+.011*curl,
-        .078-.007*pry-.028*flick-.016*pinch-.029*curl],
-      .13*pry-.22*flick+.34*curl,-open*.26+.72*pry+.13*flick+.37*curl,-open*.48+.31*pry+.21*flick+.52*pinch
-    ))});
+    const thumbDepth=palette
+      ? thumbRoot[2]-.007*pry-.028*flick+.016*pinch+.023*curl
+      : .078-.007*pry-.028*flick-.016*pinch-.029*curl;
+    const thumbPose=transform(
+      [-.118+.035*pry-.022*flick+.025*pinch+.025*curl,-.022+.024*pry+.054*flick+.027*pinch+.011*curl,thumbDepth],
+      .13*pry-.22*flick+.34*curl,-open*.26+.72*pry+.13*flick+(palette ? -.37 : .37)*curl,-open*.48+.31*pry+.21*flick+.52*pinch
+    );
+    if(palette) {
+      const thumbBend=.16*grip+.44*pinch+.21*curl;
+      moveDigit(palette,13,thumbRoot,thumbPose,fingerPalette(thumbJoints,thumbBend));
+      for(const mesh of hand.skin) opaque.push({mesh,matrix,handSide:side,palette});
+    } else opaque.push(thumb ? {...thumb,handSide:side} : {mesh:hand.thumb,handSide:side,matrix:multiply(matrix,thumbPose)});
   }
 
   function slideSwitch(opaque,hand,poseMatrix,motor) {

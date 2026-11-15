@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const {Builder,rgb,times}=Valley;
+  const {Builder,rgb,transform}=Valley;
   const oak=rgb(0xb68b59), honey=rgb(0xc39b68), walnut=rgb(0x694b34);
   const white=rgb(0xe4e3d6), pale=rgb(0xe9e2d2), steel=rgb(0xa6b1b0), charcoal=rgb(0x444745);
   const models=new WeakMap();
@@ -16,13 +16,21 @@
       return {material,shape,group};
     }
 
-    function table(length,depth,top,metal=false) {
-      const topPart=piece(metal ? m.gloss : m.wood,b=>{
-        b.box([0,top-.041,0],[length,.082,depth],metal ? steel : honey,.024);
-        if(!metal) for(const z of [-depth*.165,depth*.165]) {
-          b.box([0,top+.0006,z],[length-.061,.0012,.004],times(walnut,.94));
-        }
+    function woodTop(length,depth,top) {
+      const [{shape}]=Valley.blenderAssets.shapes("lodge_tabletop",m);
+      return piece(m.wood,b=>{
+        const matrix=transform([0,top,0]);
+        matrix[0]=length;
+        matrix[5]=.082;
+        matrix[10]=depth;
+        Valley.blenderAssets.append(b,shape,matrix,honey);
       },"top");
+    }
+
+    function table(length,depth,top,metal=false) {
+      const topPart=metal ? piece(m.gloss,b=>{
+        b.box([0,top-.041,0],[length,.082,depth],steel,.024);
+      },"top") : woodTop(length,depth,top);
       const supports=[-1,1].map(end=>piece(metal ? m.gloss : m.wood,b=>{
         const tint=metal ? steel : oak;
         for(const side of [-1,1]) {
@@ -41,17 +49,7 @@
 
     const chair={
       rx:.23,rz:.232,height:.87,
-      parts:mesh(piece(m.wood,b=>{
-        for(const side of [-1,1]) {
-          b.box([side*.158,.207,-.148],[.046,.414,.047],oak,.010);
-          b.box([side*.159,.431,.162],[.049,.856,.048],oak,.012,[-.072,0,0]);
-          b.box([side*.156,.178,.012],[.045,.047,.307],oak,.009);
-        }
-        b.box([0,.388,0],[.397,.055,.390],walnut,.021);
-        for(const y of [.538,.641,.773]) b.box([0,y,.174+(y-.52)*.13],[.339,y>.75 ? .101 : .040,.040],honey,.014);
-      }),piece(m.fabric,b=>{
-        b.box([0,.434,-.008],[.376,.073,.362],charcoal,.034);
-      }))
+      parts:mesh(...Valley.blenderAssets.shapes("lodge_dining_chair",m))
     };
     const cushion={
       rx:.211,rz:.211,height:.068,

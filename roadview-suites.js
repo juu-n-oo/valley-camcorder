@@ -27,6 +27,12 @@
       a.box(mat,where((start+end)/2,(bottom+top)/2,offset),
         alongX ? [length,span,depth] : [depth,span,length],color,{kind});
     }
+    function profile(name,slot,color,start,end,bottom,top,depth,offset=0,kind) {
+      const center=where((start+end)/2,(bottom+top)/2,offset);
+      const length=end-start, span=top-bottom;
+      a.blender(name,center,{turn:yaw,scale:[length,span,depth],tint:{[slot]:color}});
+      if(kind) a.body(center,alongX ? [length,span,depth] : [depth,span,length],kind);
+    }
     function slab(start,end,bottom,top) {
       piece(surface,start,end,bottom,top,thickness,tint,0,"wall");
       if(lining) piece(lining.surface,start,end,bottom,top,.016,lining.tint,(lining.side??-1)*(thickness/2+.009));
@@ -48,8 +54,8 @@
       if(door) {
         const {hingeFar=false,slide=0,swing=-1.55,panel="wood",open=false,color}=door;
         const rail=slide ? -thickness/2-.034 : 0;
-        for(const u of [start,end]) piece(m.wood,u-.026,u+.026,0,top,.169,oak);
-        piece(m.wood,start-.044,end+.044,top-.026,top+.049,.174,oak);
+        for(const u of [start,end]) profile("lodge_casing_upright","wood",oak,u-.026,u+.026,0,top,.169);
+        profile("lodge_casing","wood",oak,start-.044,end+.044,top-.026,top+.049,.174);
         piece(m.wood,start,end,0,.013,thickness+.021,oak);
         if(slide) for(const y of [.013,2.148]) {
           piece(m.gloss,start+Math.min(0,slide),end+Math.max(0,slide),y,y+.017,.054,steel,rail);
@@ -59,34 +65,30 @@
       } else {
         slab(start,end,0,bottom);
         const frame=frosted ? white : oak, mid=(top+bottom)/2;
-        for(const y of [bottom,top]) piece(m.paint,start-.04,end+.04,y-.029,y+.029,thickness+.078,frame);
-        for(const u of [start,center,end]) piece(m.paint,u-.026,u+.026,bottom,top,thickness+.052,frame,0,"wall");
+        for(const y of [bottom,top]) {
+          profile("lodge_window_channel","paint",frame,start-.04,end+.04,y-.029,y+.029,thickness+.078);
+        }
+        for(const u of [start,center,end]) {
+          profile("lodge_window_channel_upright","paint",frame,u-.026,u+.026,bottom,top,thickness+.052,0,"wall");
+        }
         for(const u of [center-width/4,center+width/4]) {
           Valley.lodging.pane(scene,a,where(u,mid),width/2-.050,top-bottom-.051,{yaw,frosted});
         }
-        piece(m.paint,start-.052,end+.052,bottom-.048,bottom-.020,thickness+.127,frame);
+        profile("lodge_stone_sill","plaster",rgb(0xbfb6a8),start-.052,end+.052,bottom-.061,bottom-.021,thickness+.127);
       }
       from=end;
     }
     slab(from,hi,0,height);
   }
 
-  function sofa(a,m,x,z,width,tint) {
-    a.box(m.wood,[x,.161,z],[width,.32,.67],trim,{radius:.038,kind:"wall"});
-    a.box(m.fabric,[x,.477,z+.22],[width-.065,.46,.191],tint,{radius:.061});
-    for(const side of [-1,1]) {
-      a.box(m.fabric,[x+side*width*.239,.338,z-.050],[width*.449,.142,.458],times(tint,1.08),{radius:.042});
-      a.box(m.fabric,[x+side*(width*.5-.081),.393,z],[.161,.278,.630],tint,{radius:.048});
-    }
-    a.box(m.fabric,[x+width*.267,.461,z+.079],[.279,.224,.092],rgb(0xc9b697),{radius:.045});
+  function sofa(a,x,z,width,tint) {
+    a.blender("lodge_sofa",[x,0,z],{scale:[width,1,1],tint:{fabric:tint}});
+    a.body([x,.161,z],[width,.32,.67],"wall","wood");
   }
 
-  function lowTable(a,m,x,z,width,depth) {
-    a.box(m.wood,[x,.272,z],[width,.069,depth],oak,{radius:.026,kind:"wood"});
-    for(const side of [-1,1]) for(const end of [-1,1]) {
-      a.box(m.wood,[x+side*(width/2-.098),.124,z+end*(depth/2-.088)],[.071,.245,.068],trim,{radius:.013});
-    }
-    a.box(m.paint,[x,.307,z],[width-.16,.008,depth-.135],rgb(0xded2b8),{radius:.016});
+  function lowTable(a,x,z,width,depth) {
+    a.blender("lodge_coffee_table",[x,0,z],{scale:[width,1,depth]});
+    a.body([x,.272,z],[width,.069,depth],"wood");
   }
 
   function furniture(a,m,lo,hi,depth,number) {
@@ -126,9 +128,7 @@
 
   function bedroomWall(a,m,bedX,depth,number) {
     const z=depth-.171, motor=rgb(0x5e6566);
-    a.box(m.paint,[bedX,2.376,z],[1.146,.237,.205],white,{radius:.030});
-    a.box(m.plain,[bedX,2.313,z-.109],[.962,.032,.009],rgb(0x4b514b),{radius:.006});
-    a.box(m.gloss,[bedX+.21,2.375,z-.109],[.072,.016,.009],rgb(0x657c65),{radius:.004});
+    a.blender("lodge_air_conditioner",[bedX,2.376,z]);
     const x=bedX-.97,y=2.054,fz=depth-.209;
     a.box(m.paint,[x,y-.14,depth-.107],[.088,.293,.085],motor,{radius:.022});
     a.beam(m.gloss,[x,y,depth-.088],[x,y,fz-.071],.044,.049,motor,12);
@@ -209,8 +209,8 @@
     Valley.lodging.kitchen(scene,galley,0,0,0,rgb(palette.cabinet));
     galley.done();
 
-    sofa(a,m,loungeX,depth-.461,Math.min(1.91,divider-bathX-.27),rgb(palette.sofa));
-    lowTable(a,m,divider-.70,bathZ-.245,.883,.482);
+    sofa(a,loungeX,depth-.461,Math.min(1.91,divider-bathX-.27),rgb(palette.sofa));
+    lowTable(a,divider-.70,bathZ-.245,.883,.482);
     const diningTable=divider-.551,decorZ=bathZ-.256;
     a.oval(m.paint,[diningTable,.345,decorZ],[.083,.041,.080],rgb(0x967655));
     a.oval(m.gloss,[diningTable,.380,decorZ],[.075,.013,.076],white);
