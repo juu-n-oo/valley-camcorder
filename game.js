@@ -1211,7 +1211,7 @@
   const pocket = Array.from({length:startingCartridges-1},()=>newCartridge(true));
   const pistolGear = {model:launcher,loaded:newCartridge(false),center:-.26,
     motor:{powered:true,position:1,angle:0,switching:null,pending:false},
-    speed:35.6,drag:.0089,reach:34,spinUp:.055,feedDuration:.215,kick:1};
+    speed:35.6,drag:.0089,reach:34,spinUp:.025,feedDuration:.125,kick:1};
   const rifleGear = {model:rifle,loaded:{cars:rifle.carOrder.slice(),belt:0},motor:null,center:rifle.center,reserve:18,nextCar:0,
     speed:90.4,drag:.0034,reach:92,spinUp:.025,feedDuration:.105,kick:.41};
   const spiralGear = {model:spiral,loaded:spiral.newMagazine(false),motor:null,center:spiral.center,
