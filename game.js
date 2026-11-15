@@ -1211,12 +1211,12 @@
   const pocket = Array.from({length:startingCartridges-1},()=>newCartridge(true));
   const pistolGear = {model:launcher,loaded:newCartridge(false),center:-.26,
     motor:{powered:true,position:1,angle:0,switching:null,pending:false},
-    speed:35.6,drag:.0089,reach:34,spinUp:.17,feedDuration:.49,kick:1};
+    speed:35.6,drag:.0089,reach:34,spinUp:.055,feedDuration:.215,kick:1};
   const rifleGear = {model:rifle,loaded:{cars:rifle.carOrder.slice(),belt:0},motor:null,center:rifle.center,reserve:18,nextCar:0,
-    speed:90.4,drag:.0034,reach:92,spinUp:.08,feedDuration:.19,kick:.41};
+    speed:90.4,drag:.0034,reach:92,spinUp:.025,feedDuration:.105,kick:.41};
   const spiralGear = {model:spiral,loaded:spiral.newMagazine(false),motor:null,center:spiral.center,
     spares:[spiral.newMagazine(true,[3,9,10,11]),spiral.newMagazine()],releaseGestures:[],
-    speed:66.5,drag:.0056,spinUp:.072,feedDuration:.106,kick:.24};
+    speed:66.5,drag:.0056,spinUp:.018,feedDuration:.078,kick:.24};
   const launchers = [rifleGear,pistolGear,spiralGear];
   let equipped=pistolGear, mounted=equipped.loaded, motor=equipped.motor;
   let cycle = null, queued = null, refill = null, inspection = null, pendingDraw = null, triggerHeld = false;
