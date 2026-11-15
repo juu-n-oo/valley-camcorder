@@ -68,8 +68,8 @@
       const seed=fraction(Math.sin(at[0]*36.71+at[1]*57.32+at[2]*17.95)*17335.94);
       spots.set(key,{...details,at,key,kind,size,seed,range});
     }
-    for(const {at,kind,size,normal} of site.fireSurfaces) {
-      add(at,kind,size,{blastSurface:true,normal,mark:{at,normal,width:size*.76,height:size*1.24}});
+    for(const {at,kind,size,normal,priority} of site.fireSurfaces) {
+      add(at,kind,size,{blastSurface:true,priority,normal,mark:{at,normal,width:size*.76,height:size*1.24}});
     }
     const sideways=[-normal[2],0,normal[0]];
     for(const [out,side,size] of [[.42,-.62,.67],[.88,1.25,.62],[2.25,-1.74,.54],[2.95,1.56,.45]]) {
@@ -86,14 +86,16 @@
     }
     const {material}=road.interior;
     const softMaterials=new Set([10,11,12,material.fabric,material.wallpaper,material.lobbyPrint]);
-    for(const prop of world.props) {
-      if(prop.broken || prop.picked || Math.hypot(prop.x-x,prop.z-z)>sourceRange) continue;
+    function addProp(prop,priority=false) {
+      if(prop.broken || prop.picked || Math.hypot(prop.x-x,prop.z-z)>sourceRange) return;
       const wooden=prop.parts.some(part=>part.material===material.wood || part.material===material.laminate);
       const soft=prop.parts.some(part=>softMaterials.has(part.material));
       const anchor=[0,Math.max(.055,prop.height*(wooden ? .90 : .68)),0];
       add(point(prop.matrix,anchor),wooden ? "wood" : soft ? "fabric" : "surface",
-        clamp(Math.max(prop.rx,prop.rz)*.67,.21,.71),{prop,anchor});
+        clamp(Math.max(prop.rx,prop.rz)*.67,.21,.71),{prop,anchor,blastSurface:priority,priority});
     }
+    for(const prop of site.reception??[]) addProp(prop,true);
+    for(const prop of world.props) addProp(prop);
     for(const box of Valley.roadview.boxesNear(road,x,z,sourceRange)) {
       const mark=boxSurface(box,origin), kind=box.hit==="wood" ? "wood" : "surface";
       if(kind==="surface" && distance(mark.at,origin)>8.8) continue;
@@ -130,13 +132,14 @@
     for(const spot of surfaces) start(spot,.30+spot.range*.14+spot.seed*.70);
 
     const first=[
-      ...fuels.filter(spot=>spot.blastSurface),
-      ...fuels.filter(spot=>spot.prop && spot.range<11.2).slice(0,2),
+      ...fuels.filter(spot=>spot.priority),
+      ...fuels.filter(spot=>spot.blastSurface && !spot.priority),
+      ...fuels.filter(spot=>spot.prop && !spot.priority && spot.range<11.2).slice(0,2),
       ...fuels.filter(spot=>!spot.blastSurface && !spot.prop && spot.range<9.2)
     ].slice(0,7);
     const tree=fuels.find(spot=>spot.kind==="tree" && spot.range<15);
     if(tree && !first.includes(tree)) first.push(tree);
-    let front=first.map(spot=>start(spot,.62+spot.range*.32+spot.seed*.69)).filter(Boolean);
+    let front=first.map(spot=>start(spot,.62+spot.range*(spot.priority ? .10 : .32)+spot.seed*.69)).filter(Boolean);
     // Later patches are reached by burning neighbours. The brief surface flames do not spread.
     for(let pass=0;pass<2 && front.length && count<remaining;pass++) {
       const neighbours=[];

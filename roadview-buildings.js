@@ -384,7 +384,8 @@
         door:{center:mix(reception,wing,.56),width:1.40,swing:1.55,open:true}});
       wall("x",wing,back,branch,{tint:receptionTint,
         door:{center:mix(back,branch,.41),width:1.28,swing:-1.55,open:true}});
-      Valley.reception.build(interior,a,style,{wall:reception,lo,hi,front,h,edge:wing,near:branch,rooms:layout.flat()});
+      const counter=Valley.reception.build(interior,a,style,{wall:reception,lo,hi,front,h,edge:wing,near:branch,rooms:layout.flat()});
+      if(service) service.reception=counter;
 
       const dining=-1.48;
       Valley.roadDining.build(interior,a,{lo:-wing,hi:dining,near:back,far:front-.081,height:h,style});
@@ -452,7 +453,8 @@
         for(const side of [-1,1]) box(m.wood,0,-.057,side*(front+.042),w+.25,.155,.144,wood);
         const upper=a.section([0,level,0]);
         for(const side of [-1,1]) {
-          suites.wall(interior,upper,h,"x",side*half,-front,front,{...exterior,windows:[
+          if(service && index===1 && side===-1) Valley.utilities.upperWall(interior,upper,service,h,exterior);
+          else suites.wall(interior,upper,h,"x",side*half,-front,front,{...exterior,windows:[
             {center:0,width:1.90,bottom:1.17,top:2.20}
           ]});
           const left=side<0 ? -half : wing,right=side<0 ? -wing : half;

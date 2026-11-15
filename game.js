@@ -47,7 +47,7 @@
   const rng = random(2418);
   const waterRandom = random(8191), woodRandom = random(75231);
   const waterGravity = 9.2, airFall = 7.2, particleLimit = 1350;
-  const blastRange=16.8, loosePartLife=30;
+  const loosePartLife=30;
   const woodChipRange = 5.3;
   const startingCartridges = 5, rifleSupply = 12;
   const supplyDuration = 2.4, supplyRange = 1.6;
@@ -2408,9 +2408,9 @@
     if(player.ownsLauncher) tossFromHand(equipped.prop,cam,.48,-.18);
   }
 
-  function blastPlayer(at,distance,aspect) {
-    if(death || knockdown?.fatal || distance>=blastRange) return;
-    const power=1-smooth(1.35,blastRange,distance);
+  function blastPlayer(at,distance,radius,aspect) {
+    if(death || knockdown?.fatal || distance>=radius) return;
+    const power=1-smooth(1.35,radius,distance);
     if(power<.034) return;
     const angle=rng()*Math.PI*2;
     const away=unit([player.x-at[0]+Math.cos(angle)*.86,0,player.z-at[2]+Math.sin(angle)*.86]);
@@ -2502,12 +2502,13 @@
         mix(.087,.38,rng())*(i%7===0 ? 1.50 : 1),wall ? i%3 : 3+i%2);
     }
     for(const {at,kind} of collapsed) {
-      const metal=kind==="metal", count=kind==="stairs" ? 10 : 6;
-      const away=unit([at[0]-site.at[0],0,at[2]-site.at[2]]);
+      const metal=kind==="metal", masonry=kind==="wall", count=masonry ? 20 : kind==="stairs" ? 10 : 6;
+      const away=masonry ? site.normal : unit([at[0]-site.at[0],0,at[2]-site.at[2]]);
       for(let i=0;i<count;i++) {
         const pos=plus(at,[mix(-.53,.53,rng()),mix(-.18,.61,rng()),mix(-.61,.61,rng())]);
         const velocity=plus(times(away,mix(.7,2.6,rng())),[mix(-1.25,1.25,rng()),mix(-1.5,2.95,rng()),mix(-1.5,1.5,rng())]);
-        fragment(pos,velocity,mix(6.5,11.2,rng()),mix(.26,metal ? .64 : 1.00,rng()),(metal ? 3 : 5)+i%2);
+        const piece=masonry ? i%3 : (metal ? 3 : 5)+i%2;
+        fragment(pos,velocity,mix(6.5,11.2,rng()),mix(.26,masonry ? .53 : metal ? .64 : 1.00,rng()),piece);
       }
     }
     for(let i=0;i<81;i++) {
@@ -2521,21 +2522,22 @@
 
   function detonate(site,aspect) {
     if(site.destroyed) return;
-    const collapsed=utilities.disable(site,sceneTime,blastRange);
+    const radius=site.blastRadius;
+    const collapsed=utilities.disable(site,sceneTime,radius);
     site.pending=false;
-    bursts.push(utilities.burst(site.at,sceneTime));
+    bursts.push(utilities.burst(site,sceneTime));
     const offset=minus(site.at,[player.x,player.feet+player.eyeHeight*.47,player.z]);
     const distance=Math.hypot(...offset);
     const pan=(offset[0]*Math.cos(player.yaw)+offset[2]*Math.sin(player.yaw))/Math.max(2,distance);
     audio.blast(distance,pan);
-    blastPlayer(site.at,distance,aspect);
-    props.blast(map,site.at,blastRange);
+    blastPlayer(site.at,distance,radius,aspect);
+    props.blast(map,site.at,radius);
     const interior=map.road.interior, shattered={};
     let shardBudget=480;
     for(const item of interior.items) {
       if(item.broken || (item.kind!=="glass" && item.kind!=="ceramic")) continue;
       const offset=minus(item.at,site.at), range=Math.hypot(...offset);
-      const reach=blastRange*(item.kind==="glass" ? .76 : .44);
+      const reach=radius*(item.kind==="glass" ? .76 : .44);
       if(range>reach && !item.door?.broken) continue;
       lodging.shatter(interior,item,sceneTime);
       const count=Math.min(28,shardBudget);

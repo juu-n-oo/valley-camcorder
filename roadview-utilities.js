@@ -1,11 +1,11 @@
 "use strict";
 
 (() => {
-  const {Builder,dot,mix,minus,plus,random,rgb,smooth,times,transform}=Valley;
+  const {Builder,dot,mix,minus,plus,point,random,rgb,smooth,times,transform}=Valley;
   const {storeyHeight}=Valley.roadLayout;
   const buildings=new Set(["brick","diner","inn","info","shop","shelter"]);
   const wood=rgb(0xa18769), darkWood=rgb(0x70523e), ivory=rgb(0xdbd9c9);
-  const zinc=rgb(0x9b9d93), iron=rgb(0x494e49), red=rgb(0xa14636);
+  const zinc=rgb(0x9b9d93), iron=rgb(0x494e49), red=rgb(0xa14636), chipped=rgb(0x3b3029);
   const rng=random(18651), furniture=new WeakMap();
   const clearView={data:new Float32Array(0),exposure:0,light:[0,0,0,0]};
   const burstLife=10.5;
@@ -109,8 +109,42 @@
       }
       return scene.renderer.mesh(b,i<3 ? m.plaster : m.gloss);
     });
-    return {x,z,span,foot,ground,tank,fittings,stand,normal,debris,building:b,stairs:[],
+    return {x,z,span,foot,ground,tank,fittings,stand,normal,debris,building:b,stairs:[],blastRadius:b.storeys>1 ? 24 : 16.8,
       at:a.at([x-.66,foot+.71,z]),destroyed:false,pending:false,fireAt:null,alarms:[],sprinklers:[]};
+  }
+
+  function wallProfile(bottom,top,half) {
+    const levels=[0,.12,.24,.43,.62,.78,.91,1].map(t=>mix(bottom,top,t));
+    const edges=[[-.79,-.93,-.84,-.92,-.86,-.72,-.57,-.41],[.85,.97,.89,.95,.85,.91,.65,.44]]
+      .map(row=>row.map(edge=>edge*half));
+    return {levels,edges};
+  }
+
+  function drawChippedSides(part,m,facade,tint,half,{levels,edges}) {
+    for(const [index,side] of [[0,-1],[1,1]]) {
+      const outer=side*half, row=edges[index];
+      for(let i=1;i<levels.length;i++) {
+        const y=levels[i-1], next=levels[i], u=row[i-1], v=row[i];
+        for(const face of [-1,1]) {
+          const q=face*.083;
+          const corners=[[q,y,outer],[q,y,u],[q,next,v],[q,next,outer]];
+          if(side!==face) corners.reverse();
+          part(facade).quad(corners,times(tint,i%3===1 ? .81 : .94));
+          const lip=Math.min(Math.abs(outer-u),Math.abs(outer-v))*.77;
+          part(m.rock).quad([[q+face*.001,y,u],[q+face*.001,y,u+side*lip],
+            [q+face*.001,next,v+side*lip],[q+face*.001,next,v]],times(chipped,i%2 ? .86 : 1.16));
+        }
+        part(m.rock).quad([[-.084,y,u],[.084,y,u],[.084,next,v],[-.084,next,v]],times(chipped,.86+i*.064));
+      }
+    }
+  }
+
+  function edgeBodies(scene,rim,half,{levels,edges}) {
+    for(const [index,side] of [[0,-1],[1,1]]) for(let i=1;i<levels.length;i++) {
+      const edge=side*Math.min(Math.abs(edges[index][i-1]),Math.abs(edges[index][i]));
+      Valley.lodging.body(scene,rim,[0,(levels[i-1]+levels[i])/2,(edge+side*half)/2],
+        [.174,levels[i]-levels[i-1],half-Math.abs(edge)],"rock");
+    }
   }
 
   function wall(scene,a,site,facade,tint,h) {
@@ -129,29 +163,11 @@
       part(m.wood).box([.111,.703,0],[.046,.067,span],darkWood);
     }));
     body(scene,intact,[0,(bottom+top)/2,0],[.166,top-bottom,span],"rock");
-    const levels=[0,.12,.24,.43,.62,.78,.91,1].map(t=>mix(bottom,top,t));
-    const edges=[[-.79,-.93,-.84,-.92,-.86,-.72,-.57,-.41],[.85,.97,.89,.95,.85,.91,.65,.44]]
-      .map(row=>row.map(edge=>edge*half));
-    const chipped=rgb(0x3b3029);
+    const profile=wallProfile(bottom,top,half);
     const step=[.48,site.foot-site.ground+.036,Math.min(2.1,span*.53)];
     const sill=[-.208,site.foot-step[1]/2,0];
     const rim=fixture(scene,a,"brokenWall",position,0,model(scene,part=>{
-      for(const [index,side] of [[0,-1],[1,1]]) {
-        const outer=side*half, row=edges[index];
-        for(let i=1;i<levels.length;i++) {
-          const y=levels[i-1], next=levels[i], u=row[i-1], v=row[i];
-          for(const face of [-1,1]) {
-            const q=face*.083;
-            const corners=[[q,y,outer],[q,y,u],[q,next,v],[q,next,outer]];
-            if(side!==face) corners.reverse();
-            part(facade).quad(corners,times(tint,i%3===1 ? .81 : .94));
-            const lip=Math.min(Math.abs(outer-u),Math.abs(outer-v))*.77;
-            part(m.rock).quad([[q+face*.001,y,u],[q+face*.001,y,u+side*lip],
-              [q+face*.001,next,v+side*lip],[q+face*.001,next,v]],times(chipped,i%2 ? .86 : 1.16));
-          }
-          part(m.rock).quad([[-.084,y,u],[.084,y,u],[.084,next,v],[-.084,next,v]],times(chipped,.86+i*.064));
-        }
-      }
+      drawChippedSides(part,m,facade,tint,half,profile);
       part(m.rock).box([.007,bottom+.007,0],[.187,.021,span*.76],times(chipped,1.28),.008);
       part(m.rock).box(sill,step,times(chipped,1.48),.036);
       for(let i=0;i<30;i++) {
@@ -162,11 +178,7 @@
           times(tint,mix(.34,.69,rng())),.033,[mix(-.4,.4,rng()),rng()*6.28,mix(-.45,.45,rng())]);
       }
     }));
-    for(const [index,side] of [[0,-1],[1,1]]) for(let i=1;i<levels.length;i++) {
-      const edge=side*Math.min(Math.abs(edges[index][i-1]),Math.abs(edges[index][i]));
-      body(scene,rim,[0,(levels[i-1]+levels[i])/2,(edge+side*half)/2],
-        [.174,levels[i]-levels[i-1],half-Math.abs(edge)],"rock");
-    }
+    edgeBodies(scene,rim,half,profile);
     body(scene,rim,sill,step,"rock",0,"rock");
     rim.broken=true;
     const wallKind=facade===m.wood ? "wood" : "surface";
@@ -177,9 +189,10 @@
     Object.assign(site,{intact,rim,fireSurfaces,breach:a.at([x,1.12,z])});
   }
 
-  function breakableStair(scene,a,site,origin,draw) {
+  function breakableStructure(scene,a,kind,origin,draw) {
     const boxes=[];
     const meshes=Valley.lodging.model(scene,part=>draw({
+      at:a.at,yaw:a.yaw,
       box(material,at,size,tint,{radius=0,yaw=0,kind,stair=0,stepBank}={}) {
         part(material).box(minus(at,origin),size,tint,radius,yaw ? [0,yaw,0] : null);
         if(kind) boxes.push({at,size,yaw,kind,stair,stepBank});
@@ -188,12 +201,44 @@
         part(material).cylinder(minus(from,origin),minus(to,origin),start,end,tint,sides);
       }
     }));
-    const item=Valley.lodging.fixture(scene,a,"serviceStair",origin,0,meshes);
+    const item=Valley.lodging.fixture(scene,a,kind,origin,0,meshes);
     for(const {at,size,yaw,kind,stair,stepBank} of boxes) {
       const bounds=scene.collider(...a.at(at),size,a.yaw+yaw,kind,kind,0,stair,stepBank);
       bounds.fixture=item;
     }
-    site.stairs.push(item);
+    return item;
+  }
+
+  function breakableStair(scene,a,site,origin,draw) {
+    site.stairs.push(breakableStructure(scene,a,"serviceStair",origin,draw));
+  }
+
+  function upperWall(scene,a,site,h,exterior) {
+    const {fixture,model,body}=Valley.lodging, m=scene.material;
+    const {x,z,span,building}=site, front=building.d/2, half=span*.35;
+    const {surface,tint}=exterior, lo=z-half, hi=z+half;
+    const wall=Valley.roadSuites.wall;
+    wall(scene,a,h,"x",x,-front,lo,exterior);
+    wall(scene,a,h,"x",x,hi,front,exterior);
+    const origin=[x,0,z], windows=[{center:0,width:1.90,bottom:1.17,top:2.20}];
+    const intact=breakableStructure(scene,a,"wallPanel",origin,target=>
+      wall(scene,target,h,"x",x,lo,hi,{...exterior,windows}));
+    const bottom=.115, top=h-.235, profile=wallProfile(bottom,top,half);
+    const strips=[[bottom/2,bottom],[(top+h)/2,h-top]];
+    const rim=fixture(scene,a,"brokenWall",origin,0,model(scene,part=>{
+      drawChippedSides(part,m,surface,tint,half,profile);
+      for(const [y,height] of strips) part(surface).box([0,y,0],[.166,height,2*half],tint);
+    }));
+    edgeBodies(scene,rim,half,profile);
+    for(const [y,height] of strips) body(scene,rim,[0,y,0],[.166,height,2*half],"rock");
+    rim.broken=true;
+    const landing=a.at([x+1.43,.036,z+half+.89]);
+    site.upperWall={intact,rim,breach:a.at([x,1.12,z]),landing};
+    const wallKind=surface===m.wood ? "wood" : "surface";
+    for(const side of [-1,1]) {
+      site.fireSurfaces.push({at:a.at([x-.087,.94,z+side*(half+.63)]),kind:wallKind,size:.63,normal:site.normal});
+    }
+    site.fireSurfaces.push({at:landing,kind:"wood",size:.56,normal:[0,1,0],priority:true});
   }
 
   function mountFireSystem(scene,a,site,zones,road) {
@@ -250,14 +295,21 @@
     site.tank.broken=site.fittings.broken=site.intact.broken=site.stand.broken=true;
     site.rim.broken=false;
     const collapsed=[{at:site.fittings.at,kind:"metal"}];
+    if(site.upperWall) {
+      const {intact,rim,breach}=site.upperWall;
+      intact.broken=true;
+      rim.broken=false;
+      collapsed.push({at:breach,kind:"wall"});
+    }
     for(const item of site.stairs) {
       item.broken=true;
       collapsed.push({at:item.at,kind:"stairs"});
     }
     for(const door of site.items) {
       if(door.broken || door.kind!=="door" || door.window) continue;
-      const at=door.bounds.center, offset=minus(at,site.at);
-      if(at[1]>site.building.y+3.35 || Math.hypot(...offset)>radius*.66) continue;
+      const at=door.bounds.center, range=Math.hypot(...minus(at,site.at));
+      const nearUpper=site.upperWall && at[1]<site.building.y+2*storeyHeight && range<8.4;
+      if((at[1]>site.building.y+3.35 && !nearUpper) || range>radius*.66) continue;
       door.broken=true;
       collapsed.push({at,kind:"door"});
     }
@@ -375,7 +427,8 @@
     }
   }
 
-  function burst(at,time) {
+  function burst(site,time) {
+    const {at}=site;
     const puffs=[];
     for(const [kind,count,delay,life,force,size] of [
       [0,37,.24,[.51,1.24],[3.6,12.6],[.51,1.68]],
@@ -393,6 +446,16 @@
       const force=mix(8.6,14.7,rng());
       puffs.push({kind:2,origin:plus(at,[x*.7,-.61,z*.7]),velocity:[x*force,mix(.08,.72,rng()),z*force],
         start:time+mix(.06,.19,rng()),life:mix(2.5,4.6,rng()),size:mix(.48,1.31,rng()),seed:rng()});
+    }
+    const nearby=site.upperWall ? [site.upperWall.breach,site.upperWall.landing] : [];
+    for(const prop of site.reception??[]) {
+      if(!prop.broken && !prop.picked) nearby.push(point(prop.matrix,[0,prop.height*.85,0]));
+    }
+    for(const center of nearby) for(let i=0;i<12;i++) {
+      const turn=rng()*Math.PI*2, speed=mix(.72,2.94,rng());
+      puffs.push({kind:2,origin:plus(center,[(rng()-.5)*.83,(rng()-.5)*.40,(rng()-.5)*.92]),
+        velocity:[Math.cos(turn)*speed,mix(.22,1.22,rng()),Math.sin(turn)*speed],start:time+mix(.07,.30,rng()),
+        life:mix(1.55,3.35,rng()),size:mix(.48,.98,rng()),seed:rng()});
     }
     return {at,time,puffs};
   }
@@ -430,5 +493,5 @@
     return {data,exposure,light:light ? [...light.at,light.flash] : fireLight??clearView.light};
   }
 
-  Valley.utilities={build,wall,breakableStair,bind,disable,fireSound,fireVisuals,tableSet,burst,burstLife,visuals};
+  Valley.utilities={build,wall,upperWall,breakableStair,bind,disable,fireSound,fireVisuals,tableSet,burst,burstLife,visuals};
 })();

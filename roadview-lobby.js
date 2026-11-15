@@ -301,6 +301,7 @@
       return camera(origin,Math.atan2(vector[0],-vector[2]),Math.asin(vector[1]),64,4/3);
     });
     scene.monitors.push(tv);
+    return [shelf,desk];
   }
 
   Valley.reception={build};
