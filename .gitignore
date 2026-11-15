@@ -46,3 +46,14 @@ temp/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Local Unity import cache and player builds
+/unity/Library/
+/unity/Temp/
+/unity/Logs/
+/unity/Obj/
+/unity/UserSettings/
+/unity/Builds/
+/unity/MemoryCaptures/
+/unity/*.csproj
+/unity/*.sln

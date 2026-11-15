@@ -420,5 +420,5 @@
   }
 
   const storeyHeight=2.76;
-  Valley.roadLayout={bounds,within,weir,waterStation,waterLevel,layout,point,photoPoint,bank,center,width,shoreDistance,offset,storeyHeight,mapScale};
+  Valley.roadLayout={bounds,within,barriers,weir,waterStation,waterLevel,layout,point,photoPoint,bank,center,width,shoreDistance,offset,storeyHeight,mapScale};
 })();

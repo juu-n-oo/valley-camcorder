@@ -1,0 +1,6 @@
+{
+  "name": "valley-unity-transfer",
+  "private": true,
+  "scripts": {"export": "node export.cjs"},
+  "dependencies": {"@napi-rs/canvas": "0.1.100", "sharp": "0.35.5"}
+}
