@@ -689,17 +689,25 @@ globalThis.Valley = (() => {
           c += vec3(.43,.45,.41)*gloss*.28;
         }
       } else if (uMaterial == 42) {
-        vec2 q = vLocal.xy*28.0+vLocal.z*vec2(14.0,21.0);
-        vec2 warp = vec2(noise(q*.31),noise(q*.36+2.6));
-        float burl = .5+.5*sin(q.y*1.2+noise(q*.92+warp*4.7)*9.0+warp.x*6.0);
-        c *= mix(vec3(.57,.44,.41),vec3(1.23,1.10,.93),burl);
+        vec2 q = vLocal.xy*57.0+vLocal.z*vec2(38.0,53.0);
+        vec2 warp = vec2(noise(q*.43),noise(q*.47+2.7))-.5;
+        float fiber = noise(q+warp*2.3)*.66+noise(q*2.68+warp*7.9)*.34;
+        float burl = .5+.5*sin(10.9*noise(q*.57+warp*4.4)+fiber*4.4);
+        float figure = smoothstep(.24,.81,burl*.67+fiber*.33);
+        c *= mix(vec3(.57,.42,.33),vec3(1.30,1.04,.86),figure);
         c *= ambient+diffuse*.28;
-        c += vec3(.16,.12,.09)*pow(max(0.0,dot(n,normalize(light+toward))),37.0);
+        c += vec3(.115,.092,.065)*pow(max(0.0,dot(n,normalize(light+toward))),47.0);
       } else if (uMaterial == 43) {
-        vec2 q = vLocal.xz*74.0+vLocal.y*vec2(61.0,111.0);
-        float grain = noise(q)*.12+noise(q*.36)*.067;
-        c *= (.92+grain)*(ambient+diffuse*.32);
-        c += vec3(.092,.078,.063)*pow(max(0.0,dot(n,normalize(light+toward))),24.0);
+        vec2 q = vLocal.xz*321.0+vLocal.y*vec2(277.0,319.0);
+        float grain = noise(q)*.067+noise(q*.38)*.030;
+        float pinholes = 0.0;
+        if(vUV.x > 10.0) {
+          vec2 cells = vec2(vUV.x-16.0,vUV.y)*309.0;
+          pinholes = 1.0-smoothstep(.073,.19,length(fract(cells)-.5));
+          pinholes *= 1.0-smoothstep(.23,.86,length(fwidth(cells)));
+        }
+        c *= (.949+grain-pinholes*.32)*(ambient+diffuse*.32);
+        c += vec3(.061,.054,.045)*pow(max(0.0,dot(n,normalize(light+toward))),30.0);
       } else if (uMaterial == 44) {
         float tread = smoothstep(.57,.76,fract(vUV.x*62.0+abs(vUV.y-.5)*.69));
         float grit = noise(vLocal.yz*143.0+vLocal.x*93.0);

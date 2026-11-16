@@ -252,9 +252,10 @@
       part(car,"glass",asset("rearview glass",model(m,"rearview_glass"),{ray:[m.carMetal]}),
         {hp:.23,opaqueGlass:true,center:[0,1.201,.374]});
       part(car,"carTrim",asset("engine and trunk",model(m,"engine_and_boot"),{ray:[m.carMetal]}));
+      const {anchors:gloveAnchors}=Valley.blenderAssets.get("sedan_glove_box");
       const glove=part(car,"carStorage",asset("glove box",model(m,"glove_box"),{ray:[m.carLeather]}),
-        {pivot:[-.474,.589,.841],...opening(0),pitch:-1.05,label:"glove box"});
-      handle(glove,[0,.126,-.037],[.40,.175,.111],{action:"storage"});
+        {pivot:gloveAnchors.hinge,...opening(0),pitch:-1.05,label:"glove box"});
+      handle(glove,gloveAnchors.pull,[.40,.175,.111],{action:"storage"});
       const console=part(car,"carStorage",asset("console lid",model(m,"console_lid"),{ray:[m.carLeather,m.fabric]}),
         {pivot:[0,.509,-.270],...opening(0),pitch:-1.16,label:"console"});
       handle(console,[0,.059,.243],[.252,.096,.239],{top:true,action:"storage"});

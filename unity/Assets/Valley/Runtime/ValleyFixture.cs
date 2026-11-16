@@ -77,6 +77,13 @@ namespace ValleyCamcorder
         internal void Link(ValleyMapInteractions.Part part,ValleyMapInteractions map)
         {
             Recipe=part;
+            if(kind=="carStorage" && part.grip?.Length==3)
+            {
+                // A storage fixture may be loaded from a scene baked before its handle was remodeled.
+                grip=ValleyManifest.Point(part.grip);
+                var handle=transform.Find("Handle interaction");
+                if(handle) handle.localPosition=grip;
+            }
             if(kind is "valve" or "burner" or "faucet" or "light" && ValleyMapInteractions.HasPoint(part.useAt))
             {
                 var handle=transform.Find("Handle interaction");

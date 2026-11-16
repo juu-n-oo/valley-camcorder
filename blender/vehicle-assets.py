@@ -35,6 +35,22 @@ def _finish(slot,paint=None,optic=None,override=None):
         principled.inputs["Roughness"].default_value=.24
         principled.inputs["Metallic"].default_value=.36 if override=="Red reflector" else .49
         principled.inputs["Coat Weight"].default_value=.44
+    elif override=="Mirror glass":
+        principled.inputs["Roughness"].default_value=.037
+        principled.inputs["Metallic"].default_value=1
+        principled.inputs["Coat Weight"].default_value=.29
+    elif override=="Mirror lettering":
+        principled.inputs["Roughness"].default_value=.68
+        principled.inputs["Metallic"].default_value=.02
+    elif override=="Matte meter face":
+        principled.inputs["Roughness"].default_value=.70
+        principled.inputs["Specular IOR Level"].default_value=.14
+    elif override=="Grained shift knob":
+        principled.inputs["Roughness"].default_value=.50
+        principled.inputs["Specular IOR Level"].default_value=.18
+    elif override=="Sooted exhaust":
+        principled.inputs["Roughness"].default_value=.94
+        principled.inputs["Specular IOR Level"].default_value=.035
     if slot in ("carPaint","carWood","carLens","carGlass"):
         principled.inputs["Coat Weight"].default_value=.92 if slot=="carPaint" else .35
         principled.inputs["Coat Roughness"].default_value=.067 if slot=="carPaint" else .13
@@ -49,14 +65,31 @@ def _finish(slot,paint=None,optic=None,override=None):
         links.new(tint.outputs[0],principled.inputs["Base Color"])
     if slot=="carGlass":
         transparent=nodes.new("ShaderNodeBsdfTransparent")
-        transparent.inputs["Color"].default_value=(.30,.42,.42,1)
-        fresnel=nodes.new("ShaderNodeFresnel")
-        fresnel.inputs["IOR"].default_value=1.52
+        transparent.inputs["Color"].default_value=(.48,.58,.60,1)
+        # A single sheet represents both sides of the glass. Reflect grazing
+        # light on each face without treating the cabin as the glass interior.
+        geometry=nodes.new("ShaderNodeNewGeometry")
+        facing=nodes.new("ShaderNodeVectorMath")
+        facing.operation="DOT_PRODUCT"
+        links.new(geometry.outputs["Normal"],facing.inputs[0])
+        links.new(geometry.outputs["Incoming"],facing.inputs[1])
+        magnitude=nodes.new("ShaderNodeMath")
+        magnitude.operation="ABSOLUTE"
+        links.new(facing.outputs["Value"],magnitude.inputs[0])
+        incident=nodes.new("ShaderNodeMath")
+        incident.operation="SUBTRACT"
+        incident.inputs[0].default_value=1
+        incident.use_clamp=True
+        links.new(magnitude.outputs[0],incident.inputs[1])
+        grazing=nodes.new("ShaderNodeMath")
+        grazing.operation="POWER"
+        grazing.inputs[1].default_value=2.6
+        links.new(incident.outputs[0],grazing.inputs[0])
         reflection=nodes.new("ShaderNodeMath")
         reflection.operation="MULTIPLY_ADD"
-        reflection.inputs[1].default_value=.71
-        reflection.inputs[2].default_value=.28
-        links.new(fresnel.outputs[0],reflection.inputs[0])
+        reflection.inputs[1].default_value=.73
+        reflection.inputs[2].default_value=.21
+        links.new(grazing.outputs[0],reflection.inputs[0])
         mix=nodes.new("ShaderNodeMixShader")
         links.new(reflection.outputs[0],mix.inputs[0])
         links.new(transparent.outputs[0],mix.inputs[1])
@@ -98,34 +131,78 @@ def _finish(slot,paint=None,optic=None,override=None):
         links.new(coord.outputs["Object"],noise.inputs["Vector"])
         if slot=="carWood":
             roots=nodes.new("ShaderNodeTexNoise")
-            roots.inputs["Scale"].default_value=14
-            roots.inputs["Detail"].default_value=3.7
-            roots.inputs["Roughness"].default_value=.74
-            roots.inputs["Distortion"].default_value=2.7
+            roots.inputs["Scale"].default_value=34
+            roots.inputs["Detail"].default_value=5.0
+            roots.inputs["Roughness"].default_value=.69
+            roots.inputs["Distortion"].default_value=1.8
             links.new(coord.outputs["Object"],roots.inputs["Vector"])
+            warp=nodes.new("ShaderNodeVectorMath")
+            warp.operation="SCALE"
+            warp.inputs["Scale"].default_value=.057
+            links.new(roots.outputs["Color"],warp.inputs[0])
+            position=nodes.new("ShaderNodeVectorMath")
+            position.operation="ADD"
+            links.new(coord.outputs["Object"],position.inputs[0])
+            links.new(warp.outputs[0],position.inputs[1])
             burl=nodes.new("ShaderNodeTexNoise")
-            burl.inputs["Scale"].default_value=10
+            burl.inputs["Scale"].default_value=76
             burl.inputs["Detail"].default_value=4
             burl.inputs["Roughness"].default_value=.68
-            burl.inputs["Distortion"].default_value=1.9
-            links.new(roots.outputs["Color"],burl.inputs["Vector"])
+            burl.inputs["Distortion"].default_value=.81
+            links.new(position.outputs[0],burl.inputs["Vector"])
             grain=nodes.new("ShaderNodeValToRGB")
-            grain.color_ramp.elements[0].position=.21
-            grain.color_ramp.elements[0].color=(.28,.19,.14,1)
-            grain.color_ramp.elements[1].position=.77
-            grain.color_ramp.elements[1].color=(1,.83,.65,1)
-            links.new(burl.outputs["Fac"],grain.inputs["Fac"])
+            grain.color_ramp.elements[0].position=.34
+            grain.color_ramp.elements[0].color=(.21,.12,.08,1)
+            grain.color_ramp.elements[1].position=.70
+            grain.color_ramp.elements[1].color=(1.30,.99,.68,1)
+            grain.color_ramp.elements.new(.56).color=(.70,.48,.34,1)
+            layers=nodes.new("ShaderNodeMixRGB")
+            layers.inputs[0].default_value=.37
+            links.new(burl.outputs["Fac"],layers.inputs[1])
+            links.new(roots.outputs["Fac"],layers.inputs[2])
+            links.new(layers.outputs[0],grain.inputs["Fac"])
             tint=nodes.new("ShaderNodeMixRGB")
             tint.blend_type="MULTIPLY"
-            tint.inputs[0].default_value=.89
-            links.new(grain.outputs["Color"],tint.inputs[1])
-            links.new(attribute.outputs["Color"],tint.inputs[2])
+            tint.inputs[0].default_value=.84
+            links.new(attribute.outputs["Color"],tint.inputs[1])
+            links.new(grain.outputs["Color"],tint.inputs[2])
             links.new(tint.outputs[0],principled.inputs["Base Color"])
         bump=nodes.new("ShaderNodeBump")
         bump.inputs["Strength"].default_value={"carPaint":.08,"carWood":.11,"carLens":.10}.get(slot,.22)
-        bump.inputs["Distance"].default_value=.0012 if slot in ("fabric","carLeather") else .00035
+        bump.inputs["Distance"].default_value=.0012 if slot=="fabric" else .00035
         links.new(noise.outputs["Fac"],bump.inputs["Height"])
         links.new(bump.outputs["Normal"],principled.inputs["Normal"])
+    if override in ("Perforated cushion","Perforated backrest","Speaker mesh","Grained shift knob"):
+        coordinates=nodes.new("ShaderNodeTexCoord")
+        separate=nodes.new("ShaderNodeSeparateXYZ")
+        links.new(coordinates.outputs["Object"],separate.inputs[0])
+        plane=nodes.new("ShaderNodeCombineXYZ")
+        u,v=("Y","Z") if override=="Speaker mesh" else ("X","Y" if override=="Perforated cushion" else "Z")
+        links.new(separate.outputs[u],plane.inputs["X"])
+        links.new(separate.outputs[v],plane.inputs["Y"])
+        cells=nodes.new("ShaderNodeTexVoronoi")
+        cells.voronoi_dimensions="2D"
+        cells.inputs["Randomness"].default_value=0
+        cells.inputs["Scale"].default_value=309 if override!="Speaker mesh" else 431
+        links.new(plane.outputs[0],cells.inputs["Vector"])
+        pits=nodes.new("ShaderNodeValToRGB")
+        pits.color_ramp.elements[0].position=.082
+        pits.color_ramp.elements[0].color=(.44,.41,.37,1)
+        pits.color_ramp.elements[1].position=.216
+        links.new(cells.outputs["Distance"],pits.inputs["Fac"])
+        tint=nodes.new("ShaderNodeMixRGB")
+        tint.blend_type="MULTIPLY"
+        tint.inputs[0].default_value=.85
+        links.new(attribute.outputs["Color"],tint.inputs[1])
+        links.new(pits.outputs["Color"],tint.inputs[2])
+        links.new(tint.outputs[0],principled.inputs["Base Color"])
+        dots=nodes.new("ShaderNodeBump")
+        dots.inputs["Strength"].default_value=.30
+        dots.inputs["Distance"].default_value=.00023
+        links.new(pits.outputs["Color"],dots.inputs["Height"])
+        if slot=="carLeather":
+            links.new(bump.outputs["Normal"],dots.inputs["Normal"])
+        links.new(dots.outputs["Normal"],principled.inputs["Normal"])
     return mat
 
 
@@ -248,7 +325,8 @@ def _assemble():
 
 
 def build_vehicles():
-    for file in ("vehicle-exterior.py","vehicle-cabin.py","vehicle-tire-lettering.py","vehicle-mechanical.py"):
+    for file in ("vehicle-exterior.py","vehicle-cabin.py","vehicle-instruments.py",
+                 "vehicle-tire-lettering.py","vehicle-mechanical.py"):
         source=ROOT/"blender"/file
         exec(compile(source.read_text(encoding="utf-8"),str(source),"exec"),globals())
     _body_shell()
@@ -259,6 +337,8 @@ def build_vehicles():
     _inside_mirror()
     _upholstery()
     _dashboard()
+    _footwells()
+    _glove_box()
     _cabin_storage()
     _wheel_models()
     _engine_and_boot()

@@ -135,3 +135,21 @@ test('Sonata grille, fog lamps, front wings and cast wheels have modeled opening
   assert.equal(covers(wheel,[1,2,0],[.158*Math.cos(angle),.158*Math.sin(angle)],.137),false);
   assert.ok(covers(wheel,[1,2,0],[.155*Math.cos(spoke),.155*Math.sin(spoke)],.137));
 });
+
+test('Sonata leather perforations stay on the cushion and backrest inserts', () => {
+  const {shape} = assets.get('sedan_upholstery').parts.find(part => part.slot === 'carLeather');
+  let cushion=0, backrest=0, smooth=0;
+  for (let i=0; i<shape.vertices.length; i+=11) {
+    const [x,y]=shape.vertices.subarray(i,i+2);
+    const [u,v]=shape.vertices.subarray(i+6,i+8);
+    if (u<10) {
+      smooth++;
+      continue;
+    }
+    assert.ok(Math.abs(u-(16+x))<.0001);
+    assert.ok(Math.abs(v)<1.22);
+    if (y<.51) cushion++;
+    else backrest++;
+  }
+  assert.ok(cushion>300 && backrest>300 && smooth>cushion+backrest);
+});

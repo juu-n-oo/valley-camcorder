@@ -64,6 +64,7 @@ Shader "Valley/Weathered Surface"
                 float2 uv:TEXCOORD2;
                 half3 color:TEXCOORD3;
                 half fog:TEXCOORD4;
+                float3 positionOS:TEXCOORD5;
             };
 
             Varyings Vert(Attributes input)
@@ -90,6 +91,7 @@ Shader "Valley/Weathered Surface"
                 output.normalWS=TransformObjectToWorldNormal(input.normalOS);
                 output.uv=input.uv;
                 output.color=SRGBToLinear(input.color.rgb);
+                output.positionOS=input.positionOS.xyz;
                 output.fog=ComputeFogFactor(output.positionCS.z);
                 return output;
             }
@@ -203,11 +205,37 @@ Shader "Valley/Weathered Surface"
                     albedo=half3(.020h,.017h,.014h)*(1+uneven);
                     rough=.09h;
                 }
+                else if (_Kind==42)
+                {
+                    float2 q=input.positionOS.xy*57.0+input.positionOS.z*float2(38.0,53.0);
+                    float2 warp=float2(Noise(q*.43),Noise(q*.47+2.7))-.5;
+                    float fiber=Noise(q+warp*2.3)*.66+Noise(q*2.68+warp*7.9)*.34;
+                    float burl=.5+.5*sin(10.9*Noise(q*.57+warp*4.4)+fiber*4.4);
+                    half figure=smoothstep(.24,.81,burl*.67+fiber*.33);
+                    albedo*=lerp(half3(.45,.32,.27),half3(1.51,1.12,.91),figure);
+                    rough=.69h;
+                    relief=.00038*fiber;
+                }
+                else if (_Kind==43)
+                {
+                    float2 q=input.positionOS.xz*321.0+input.positionOS.y*float2(277.0,319.0);
+                    float grain=Noise(q)*.067+Noise(q*.38)*.030;
+                    float pinholes=0;
+                    if(input.uv.x>10)
+                    {
+                        float2 cells=float2(input.uv.x-16.0,input.uv.y)*309.0;
+                        pinholes=1-smoothstep(.073,.19,length(frac(cells)-.5));
+                        pinholes*=1-smoothstep(.23,.86,length(fwidth(cells)));
+                    }
+                    albedo*=.949+grain-pinholes*.32;
+                    rough=.31h;
+                    relief=.00035*(.3+grain-pinholes*.24);
+                }
                 else if (_Kind==10 || _Kind==11 || _Kind==12 || _Kind==16 || _Kind==7 || _Kind==14 ||
                          _Kind==13 || _Kind==19 || _Kind==20 || _Kind==22 || _Kind==25 || _Kind==26 ||
-                         _Kind==27 || _Kind==28 || _Kind==35 || _Kind==36 || _Kind==42 || _Kind==43 || _Kind==46)
+                         _Kind==27 || _Kind==28 || _Kind==35 || _Kind==36 || _Kind==46)
                 {
-                    float2 surfaceUV=(_Kind==13 || _Kind==26 || _Kind==42) ? plane*float2(2.8,.64) :
+                    float2 surfaceUV=(_Kind==13 || _Kind==26) ? plane*float2(2.8,.64) :
                         _Kind==19 || _Kind==20 || _Kind==22 || _Kind==25 || _Kind==27 ? plane*1.55 : input.uv;
                     half3 tex=SAMPLE_TEXTURE2D(_BaseMap,sampler_BaseMap,surfaceUV).rgb;
                     albedo*=.63+tex*.46;

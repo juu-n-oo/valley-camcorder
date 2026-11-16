@@ -30,7 +30,7 @@ SEDAN_RUBBER = rgb(0x252729)
 SEDAN_TRIM = rgb(0x77786f)
 SEDAN_LEATHER = rgb(0xc5b69a)
 SEDAN_WALNUT = rgb(0x77422a)
-SEDAN_CARPET = rgb(0x6d6656)
+SEDAN_CARPET = rgb(0x958b73)
 SEDAN_PAINTS = {"Obsidian black":rgb(0x0a0b0d),"Pearl white":rgb(0xe9e8df),"Silver grey":rgb(0x8b9297)}
 SEDAN_WHEELS = (-1.405,1.405)
 SEDAN_DOORS = {True:(-.270,1.011),False:(-1.272,-.295)}
@@ -293,16 +293,16 @@ def _letter(name,slot,body,at,size,color,*,right=(1,0,0),up=(0,1,0),font=None,ri
         return mesh(name,slot,body,points,faces,color,soft=False,consistent=False)
 
 
-def _badge(name,at,width,axis,color,reverse=False):
+def _badge(name,at,width,axis,color,reverse=False,*,slot="carMetal",slope=0):
     """Beveled oval and tapered, connected strokes traced from the deck emblem."""
     sign = -1 if reverse else 1
 
     def point(u,v,d):
-        xyz = (u*sign*width,v*width,d*width*sign) if axis=="z" else (u*sign*width,d*width,-v*width)
+        xyz = (u*sign*width,v*width,(d*sign+v*slope)*width) if axis=="z" else (u*sign*width,d*width,-v*width)
         return _add(at,xyz)
 
     ring=_elliptic(1,.490,1,60)
-    _bezel(name,"carMetal","Beveled oval insignia",ring,point,
+    _bezel(name,slot,"Beveled oval insignia",ring,point,
            [(1,-.015),(1,.004),(.982,.018),(.955,.020),(.919,.009),(.912,-.010)],color)
     emblem=_outline([(-.341,-.148),(-.292,-.057),(-.241,.023),(-.169,.144),
                      (-.149,.220),(-.053,.224),(-.105,.125),(-.120,.084),
@@ -311,7 +311,7 @@ def _badge(name,at,width,axis,color,reverse=False):
                      (.075,-.111),(.060,-.223),(-.032,-.231),(.005,-.143),
                      (.017,-.092),(-.003,-.066),(-.041,-.069),(-.108,-.093),
                      (-.167,-.131),(-.222,-.184),(-.255,-.200)],3)
-    _bezel(name,"carMetal","Connected slanted H insignia",emblem,point,
+    _bezel(name,slot,"Connected slanted H insignia",emblem,point,
            [(1,-.013),(1,.002),(.984,.015),(.959,.020)],color,True)
 
 
@@ -385,6 +385,13 @@ def _body_shell():
                _paint_tint,flip=side>0)
         _cord(name,"plain","Continuous door aperture seal",
               [(side*.844,.246,z) for z in (-1.17,-.45,.29,1.02)],.015,SEDAN_RUBBER)
+        def sill(u,v):
+            height=.246+.020*sin(pi*u)*sin(pi*v)**.33
+            return side*blend(.758,.865,u),height,blend(-1.146,.976,v)
+        _panel(name,"plain","Warm gray molded door sill scuff plate",12,45,sill,rgb(0x727771),flip=side>0)
+        for u in (.18,.31,.79,.90):
+            _cord(name,"plain","Lengthwise ribs in sill scuff plate",
+                  [_add(sill(u,v),(0,.0012,0)) for v in _range(25)],.00089,rgb(0x646962),sides=4)
         if side>0:
             def fuel(u,v,depth):
                 z,y=fuel_center[0]+u,fuel_center[1]+v
@@ -429,10 +436,30 @@ def _body_shell():
         for side in (-1,1):
             lathe(name,"carMetal","Plate mounting screw",[(-.003,.005,.005),(.003,.005,.005)],
                   SEDAN_ALLOY,10,(side*.155,y+.065,z),axis="z")
-    _cord(name,"plain","Backbox outlet pipe",catmull([(-.504,.236,-1.70),(-.533,.236,-1.932),
-          (-.554,.232,-2.040),(-.557,.234,-2.152)],4),.024,rgb(0x373936),sides=12)
-    lathe(name,"carMetal","Rolled exhaust tip",[(-.030,.027,.029),(0,.032,.034),(.028,.031,.033),(.028,.023,.026)],
-          rgb(0x555b5b),22,(-.558,.234,-2.146),axis="z",caps=False)
+    exhaust=(-.551,.237,-2.181)
+    lathe(name,"carMetal","Seamed oval rear silencer",
+          [(.252,.082,.048),(.226,.117,.058),(-.116,.116,.058),(-.148,.087,.050)],
+          rgb(0x66645b),34,(-.530,.270,-1.829),"z")
+    for z in (-1.619,-1.953):
+        lathe(name,"plain","Crimped steel muffler shell seam",[(0,.107,.056),(.0048,.116,.060),(.010,.112,.058)],
+              rgb(0x414039),32,(-.530,.270,z),"z",caps=False)
+    _cord(name,"plain","Bent tail pipe upstream of rolled mouth",
+          catmull([(-.532,.260,-1.935),(-.563,.252,-2.016),(-.560,.243,-2.071),
+                   (-.550,.238,-2.099)],5),
+          .022,rgb(0x474740),sides=17)
+    # The opening returns into the outlet wall, leaving a visible bore.
+    lathe(name,"carMetal","Rounded lip at recessed exhaust outlet",
+          [(.086,.023,.021),(.039,.024,.021),(.009,.026,.022),(-.013,.027,.023),(-.020,.026,.022),
+           (-.021,.023,.019),(-.018,.021,.018),(-.007,.021,.018)],rgb(0x69685e),
+          36,exhaust,"z",caps=False)
+    bore=lathe(name,"plain","Dark heat stained exhaust bore",
+               [(-.018,.021,.018),(0,.021,.018),(.082,.020,.019)],rgb(0x10120f),32,
+               exhaust,"z",caps=False)
+    bore["finish_override"]="Sooted exhaust"
+    _cord(name,"carMetal","Muffler hanger rod",[(-.459,.286,-1.919),(-.410,.298,-1.925),
+          (-.404,.324,-1.941)],.0068,rgb(0x5f594d),sides=8)
+    _pill(name,"plain","Rubber exhaust isolation hanger",(-.405,.336,-1.940),
+          .035,.047,.018,rgb(0x23241f),"z",.49)
     box(name,"plain","Recessed underbody floor pan",(0,.216,-.12),(1.32,.066,3.54),SEDAN_BLACK,.028)
 
 
@@ -945,21 +972,51 @@ def _roof_and_glazing():
               for t in _range(23)],.018,SEDAN_TRIM)
     _headliner_details(roof)
 
+    _cowl_wipers()
+
+
+def _cowl_wipers():
     name=_sedan_asset("wipers")
-    box(name,"plain","Cowl air tray",(0,.933,.895),(1.48,.024,.086),SEDAN_BLACK,.010)
+    def glass(u,v,offset):
+        return _add(_end_glass_point(True,u,v),(0,.006+offset,.008+offset*.51))
+
+    def cowl(u,v):
+        x=blend(-.763,.763,u)
+        return x,.932-.028*(abs(x)/.763)**1.7+.007*sin(pi*v),.830+.073*v+.035*(1-(x/.763)**2)
+
+    _panel(name,"plain","Cowl grille below windshield seal",46,11,cowl,rgb(0x272b29),True)
     for side in (-1,1):
-        for i in range(16):
-            x=side*(.17+i*.029)
-            box(name,"gloss","Cowl ventilation slots",(x,.947,.912),(.009,.0026,.031),rgb(0x373a37),.001)
-        def wiped(u,v):
-            return _add(_end_glass_point(True,u,v),(0,.010,.016))
-        at=wiped(.50+side*.251,.997)
-        elbow=wiped(.51+side*.177,.938)
-        blade=[wiped(blend(.50+side*.189-.127,.50+side*.189+.123,t),.928+.025*t)
-               for t in _range(21)]
-        lathe(name,"plain","Wiper spindle",[(0,.013,.013),(.009,.011,.011)],SEDAN_BLACK,14,at)
-        _cord(name,"plain","Parked wiper arm",[at,elbow],.006,SEDAN_BLACK)
-        _cord(name,"plain","Wiper blade with backbone",blade,.0065,rgb(0x262929))
+        for i in range(19):
+            u=.5+side*(.119+.0181*i)
+            _cord(name,"gloss","Narrow molded cowl vent slot",
+                  [_add(cowl(u+t*.005,blend(.124,.750,t)),(0,.0017,0)) for t in _range(7)],
+                  .0023,rgb(0x171b19),sides=5)
+    for start,end,pivot in ((.462,.861,.870),(.107,.489,.509)):
+        at=glass(pivot,1,.0015)
+        lathe(name,"plain","Wiper spindle gaiter",
+              [(0,.014,.014),(.007,.014,.014),(.011,.010,.010)],rgb(0x252928),26,at)
+        lathe(name,"gloss","Pressed wiper spindle cap",
+              [(0,.010,.010),(.005,.009,.009)],rgb(0x363b37),20,_add(at,(0,.010,0)))
+        def blade(t,h=0):
+            u=blend(start,end,t)
+            v=.988-.027*sin(pi*t*.91)-.006*t
+            return glass(u,v,.002+h)
+        root=_add(at,(0,.014,-.004))
+        fold=_add(glass(end-.047,.942,.017),(0,.004,0))
+        link=blade(.545,.015)
+        tube(name,"plain","Tapered stamped wiper arm and return spring cover",
+             [(root,.0082,.0060),(fold,.0072,.0043),(link,.0038,.0042)],rgb(0x252a27),sides=8,density=5)
+        _cord(name,"plain","Continuous tapered rubber squeegee",[blade(t,.0017) for t in _range(59)],
+              .00235,rgb(0x161918),sides=7)
+        _cord(name,"gloss","Steel blade carrier spine",[blade(t,.0043) for t in _range(57)],
+              .0034,rgb(0x303632),sides=7)
+        for a,b,flange in ((.027,.30,.006),(.29,.55,.011),(.54,.79,.011),(.78,.976,.006)):
+            bow=[blade(blend(a,b,t),.0045+flange*sin(pi*t)**.61) for t in _range(11)]
+            _cord(name,"plain","Bow of the articulated wiper bridge",bow,.0032,rgb(0x292e2a),sides=7)
+        _pill(name,"plain","Central wiper arm adapter",blade(.545,.014),.044,.025,.011,
+              rgb(0x252b27),"y",.46)
+        for t in (.071,.27,.72,.929):
+            _pill(name,"plain","Blade bridge clip",blade(t,.006),.016,.018,.006,rgb(0x343934),"y",.64)
 
 
 def _doors_and_mirrors():
@@ -1034,31 +1091,47 @@ def _outside_mirror(side,pivot,suffix):
     mesh(house,"plain",name+" molded sail mounting plate",mount,[(0,1,2)],SEDAN_BLACK,soft=False)
     _cord(house,"plain",name+" mirror stalk",[(side*.897,.951,.790),(side*.952,.973,.778),(side*.992,.985,.771)],
           .024,SEDAN_BLACK,sides=12)
-    outline=_outline([(-.106,-.010),(-.093,.030),(-.034,.052),(.061,.045),(.116,.014),
-                      (.111,-.025),(.068,-.047),(-.061,-.045)],4)
+    outline=_outline([(-.109,-.037),(-.113,-.003),(-.104,.038),(-.076,.056),(-.028,.054),
+                      (.054,.041),(.105,.016),(.126,-.007),(.115,-.031),(.076,-.045),
+                      (-.039,-.050),(-.085,-.046)],5)
     def mirror(u,v,d):
-        return (side*(1.021+u),.987+v+.09*u,.717+d+.16*u)
+        return (side*(1.024+u),.989+v+.047*u,.716+d+.141*u+.0047*(u/.124)**2)
     _bezel(house,"carPaint",name+" contoured mirror cap",outline,mirror,
-           [(1,-.004),(1,.027),(.91,.059),(.67,.084),(.35,.095)],SEDAN_PAINT,True)
+           [(1,-.006),(1,.028),(.942,.057),(.742,.081),(.39,.093)],SEDAN_PAINT,True)
     _bezel(house,"plain",name+" glass mount and dark cavity",outline,mirror,
-           [(1,.007),(1,-.005),(.993,-.015),(.902,-.017),(.865,-.012)],SEDAN_BLACK,True)
-    _bezel(glass,"carMetal",name+" convex reflecting glass",outline,mirror,
-           [(.897,-.018),(.855,-.023),(.53,-.028)],rgb(0x879b9f),True)
-    if side<0:
-        _letter(glass,"gloss","OBJECTS IN MIRROR",mirror(.003,-.033,-.029),.0044,rgb(0xa9bbb9),
-                right=(-1,0,0),rise=.00006)
+           [(1,.008),(1,-.006),(.983,-.014),(.936,-.018),(.908,-.010)],SEDAN_BLACK,True)
+    pane=_bezel(glass,"carMetal",name+" shallow convex mirror with polished edge",outline,mirror,
+                [(.936,-.018),(.919,-.020),(.902,-.022),(.71,-.024),(.40,-.026)],rgb(0x929c9c),True)
+    pane["finish_override"]="Mirror glass"
+    font_path=Path("C:/Windows/Fonts/malgun.ttf")
+    font=bpy.data.fonts.load(str(font_path),check_existing=True) if font_path.exists() else None
+    warning=_letter(glass,"gloss" if side<0 else "carMetal",
+                    "사물이 거울에 보이는 것보다 가까이 있음" if font else "OBJECTS IN MIRROR",
+                    (0,-.032,0),.0049,rgb(0xa7aaa2),right=(-1,0,0),font=font,rise=.00005,
+                    project=lambda x,y,z:mirror(side*x,y,-.027+z))
+    if warning:
+        warning["finish_override"]="Mirror lettering"
 
 
 def _inside_mirror():
     house=_sedan_asset("rearview_housing")
     glass=_sedan_asset("rearview_glass")
-    outline=_outline([(-.135,-.022),(-.118,.031),(.114,.031),(.135,-.022),(.109,-.038),(-.108,-.038)],4)
+    outline=_outline([(-.121,-.018),(-.120,.017),(-.103,.029),(.099,.029),
+                      (.122,.018),(.125,-.017),(.113,-.034),(-.107,-.035)],5)
     def view(u,v,d):
-        return (u,1.201+v,.390+d-.15*v)
+        return (u,1.205+v,.398+d-.120*v)
     _bezel(house,"plain","Day/night rearview shell",outline,view,
-           [(.87,.029),(1,.013),(1,-.009),(.92,-.012),(.89,-.006)],SEDAN_BLACK,True)
-    _bezel(glass,"carMetal","Separate rearview mirror glass",outline,view,
-           [(.915,-.013),(.890,-.016)],rgb(0x9aabab),True)
-    _cord(house,"plain","Windscreen mount",[(-.004,1.220,.417),(0,1.249,.420),(0,1.286,.427)],
-          .014,rgb(0x313433),sides=12)
-    box(house,"plain","Anti-glare toggle",(0,1.154,.406),(.051,.012,.026),SEDAN_BLACK,.006)
+           [(.77,.027),(.973,.017),(1,.003),(1,-.010),(.960,-.014),(.922,-.012)],rgb(0x252a28),True)
+    prism=_bezel(glass,"carMetal","Reflecting prism of day and night rearview mirror",outline,view,
+                  [(.945,-.014),(.928,-.017),(.908,-.018)],rgb(0x999e9b),True)
+    prism["finish_override"]="Mirror glass"
+    def shoe(u,v,d):
+        return _add(_end_glass_point(True,.5+u,.277+v),(0,0,-d))
+    stem=[(-.003,1.217,.420),(0,1.236,.427),(0,1.259,.435),shoe(0,0,.016)]
+    _cord(house,"plain","Angled windscreen bonded mirror stem",catmull(stem,4),
+          .0115,rgb(0x2d322f),sides=12)
+    _pill(house,"plain","Mirror ball joint boot",stem[0],.037,.034,.022,rgb(0x313633),"z",.87)
+    _bezel(house,"plain","Mirror shoe bonded along curved windscreen",
+           _elliptic(.032,.065,.46,30),shoe,[(1,.003),(1,.008),(.84,.016)],rgb(0x232926),True)
+    _pill(house,"plain","Narrow anti-glare thumb lever",(0,1.166,.397),.036,.030,.013,
+          rgb(0x252927),"z",.51)

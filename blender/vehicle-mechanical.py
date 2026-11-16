@@ -122,6 +122,14 @@ def _wheel_models():
 
 def _engine_and_boot():
     name=_sedan_asset("engine_and_boot")
+    records=ASSETS[name]["records"]
+    upright={}
+
+    def mark(slot,text,at,size,color,**options):
+        label=_letter(name,slot,text,at,size,color,**options)
+        if label:
+            upright[label]=at[0]
+
     black=rgb(0x292e2d)
     steel=rgb(0x767b76)
     aluminum=rgb(0xa9aaa0)
@@ -129,16 +137,25 @@ def _engine_and_boot():
     gray=rgb(0x414543)
     _pill(name,"plain","Pressed engine compartment floor",(0,.327,1.676),1.443,1.147,.089,black,"y",.40)
     box(name,"gloss","Insulated firewall",(0,.647,1.076),(1.497,.395,.062),rgb(0x454943),.016)
-    box(name,"carMetal","Radiator upper carrier",(0,.621,2.125),(1.494,.065,.128),steel,.019)
+    box(name,"carMetal","Dark stamped upper radiator crossmember",
+        (0,.621,2.125),(1.494,.065,.128),rgb(0x434b48),.019)
     box(name,"plain","Radiator assembly",(0,.508,2.155),(1.095,.190,.103),black,.020)
-    for i in range(25):
-        x=(i-12)*.040
-        box(name,"carMetal","Radiator cooling fin",(x,.531,2.214),(.010,.146,.009),rgb(0x767a72),.001)
+    for i in range(36):
+        x=(i-17.5)*.028
+        box(name,"carMetal","Fine radiator cooling fin",(x,.531,2.211),(.005,.140,.008),rgb(0x515955),.001)
+    for side in (-1,1):
+        at=(side*.573,.653,2.144)
+        lathe(name,"plain","Rubber radiator locating grommet",
+              [(0,.027,.027),(.007,.027,.027),(.011,.021,.021),(.011,.009,.009)],
+              rgb(0x2b302e),26,at,caps=False)
+        lathe(name,"carMetal","Radiator isolator center ring",[(0,.010,.010),(.006,.010,.010)],
+              rgb(0x6f756d),16,_add(at,(0,.003,0)),caps=False)
     for side in (-1,1):
         x=side*.668
-        _pill(name,"carMetal","Rolled fender flange",(x,.745,1.611),.124,1.035,.076,steel,"y")
+        _pill(name,"carMetal","Painted rolled fender flange",(x,.745,1.611),.124,1.035,.076,
+              rgb(0x414b47),"y")
         lathe(name,"carMetal","Stamped strut tower",[(.000,.149,.149),(.034,.149,.149),(.082,.107,.107),(.091,.086,.086)],
-              steel,34,(side*.595,.689,1.486))
+              rgb(0x505a53),40,(side*.595,.689,1.486))
         lathe(name,"plain","Suspension top hat",[(0,.075,.075),(.016,.068,.068),(.041,.046,.046)],
               black,24,(side*.595,.769,1.486))
         for i in range(3):
@@ -155,9 +172,12 @@ def _engine_and_boot():
     _bezel(name,"carMetal","Bright 16-valve cover casting",cover,
            lambda u,v,d:(.122+u,.775+d-.16*v,1.830+v),
            [(1,-.022),(1,.001),(.94,.014)],aluminum,True)
-    _letter(name,"carMetal","DOHC 16 VALVE",(.12,.791,1.858),.052,rgb(0x77796d),
-            up=(0,0,-1),rise=.0012)
+    mark("carMetal","DOHC 16 VALVE",(.120,0,1.858),.049,rgb(0x939488),
+         up=(0,0,-1),rise=.00088,width=1.07,
+         project=lambda x,y,z:(x,.7894-.16*(z-1.830)+y,z))
+    badge_start=len(records)
     _badge(name,(.247,.827,1.572),.123,"y",rgb(0x83877d))
+    upright.update((piece,.247) for piece,*_ in records[badge_start:])
     for i in range(5):
         z=1.558+i*.032
         _cord(name,"plain","Valve cover ribs",[(.026,.825,z),(-.047,.826,z),(-.144,.823,z+.011)],.0043,gray)
@@ -170,7 +190,7 @@ def _engine_and_boot():
         a=i*tau/10
         at=(oil[0]+.048*cos(a),.841,oil[2]+.048*sin(a))
         box(name,"plain","Cross-hatched cap grips",at,(.012,.012,.010),gray,.002,-a)
-    _letter(name,"gloss","ENGINE OIL",(.318,.851,1.478),.008,rgb(0x79786a),up=(0,0,-1),rise=.00014)
+    mark("gloss","ENGINE OIL",(.318,.851,1.478),.008,rgb(0x79786a),up=(0,0,-1),rise=.00014)
 
     heat=_outline([(-.245,-.046),(-.220,-.101),(.209,-.103),(.246,-.047),(.211,.077),(.133,.118),
                    (-.155,.120),(-.225,.047)],4)
@@ -181,7 +201,11 @@ def _engine_and_boot():
     for z in (.026,.056,.089):
         _cord(name,"carMetal","Heat shield pressed ridge", [shield(lerp_u,z+.008*(lerp_u/.18)**2,.048)
               for lerp_u in (-.163,-.103,0,.103,.163)],.005,rgb(0x8e9488))
-    _letter(name,"gloss","HOT",(.127,.727,1.924),.036,rgb(0x777e77),up=(0,0,-1),rise=.00036)
+    mark("carMetal","HOT",(.127,0,1.924),.035,rgb(0x82877e),up=(0,0,-1),rise=.00046,
+         project=lambda x,y,z:shield(x-.127,z-1.969,.0579+y))
+    _cord(name,"carMetal","Stamped heat warning border",
+          [shield(x,z-.044,.0583) for x,z in _elliptic(.118,.049,.43,32)],
+          .00082,rgb(0x898c81),closed=True,sides=5)
     _cord(name,"gloss","Yellow oil dipstick grip",catmull([(.422,.696,1.920),(.412,.719,1.954),
           (.435,.719,1.967),(.445,.705,1.933)],4),.0045,yellow,closed=True)
     for x in (-.05,.306):
@@ -209,8 +233,14 @@ def _engine_and_boot():
         _cord(name,"carMetal" if i in (1,len(air)-2) else "plain","Intake elbow ring",loop,.0036,
               SEDAN_ALLOY if i in (1,len(air)-2) else gray,closed=True,sides=4)
 
-    box(name,"plain","Battery box sidewall",(-.447,.604,1.864),(.311,.239,.316),rgb(0x60635b),.022)
+    box(name,"plain","Off-white molded battery case",(-.447,.604,1.864),(.311,.239,.316),
+        rgb(0x909388),.022)
     box(name,"plain","Battery black lid",(-.447,.739,1.864),(.320,.061,.326),black,.017)
+    box(name,"gloss","Battery lid parting line",(-.447,.713,1.864),(.312,.008,.326),rgb(0x3c3f36),.010)
+    for i in range(5):
+        z=1.746+i*.058
+        _cord(name,"plain","Molded white ribs in battery wall",[(-.291,.548,z),(-.290,.687,z)],
+              .0029,rgb(0x7a7c73),sides=5)
     _cord(name,"gloss","Yellow battery handle",catmull([(-.517,.767,1.905),(-.518,.783,1.825),
           (-.399,.783,1.825),(-.393,.767,1.905)],3),.010,yellow,sides=7)
     for x,col in ((-.535,rgb(0x907669)),(-.363,rgb(0x9a4b37))):
@@ -218,8 +248,10 @@ def _engine_and_boot():
               col,12,(x,.760,1.958))
         _cord(name,"plain","Battery circuit protection cable",catmull([(x,.775,1.959),(x-.064,.749,2.048),
               (x-.117,.700,2.084)],5),.008,SEDAN_RUBBER)
+        lathe(name,"carMetal","Battery clamp hex nut",[(0,.007,.007),(.005,.007,.007)],
+              SEDAN_ALLOY,6,(x+.014,.780,1.958))
     box(name,"plain","Fuse and relay cover",(-.630,.690,1.625),(.162,.149,.198),rgb(0x414442),.018)
-    _letter(name,"gloss","FUSE  RELAY",(-.630,.767,1.622),.012,rgb(0x75796a),up=(0,0,-1),rise=.00018)
+    mark("gloss","FUSE  RELAY",(-.630,.767,1.622),.012,rgb(0x75796a),up=(0,0,-1),rise=.00018)
     for x,z,w,col in ((.606,1.923,.128,rgb(0x368694)),(.582,1.752,.143,rgb(0x696f5d)),
                       (-.537,1.189,.107,rgb(0x313830))):
         _pill(name,"gloss","Molded fluid reservoir",(x,.655,z),w,.116,.166,rgb(0xbfc2a1),"y",.68)
@@ -234,18 +266,31 @@ def _engine_and_boot():
     lathe(name,"carMetal","Pressure filler cap",[(0,.033,.033),(.012,.032,.032)],aluminum,24,(-.224,.660,2.137))
     _pill(name,"gloss","Yellow pressure cap warning",(-.224,.674,2.137),.054,.045,.004,yellow,"y",.84)
     box(name,"gloss","Cooling safety sticker",(.296,.659,2.134),(.106,.002,.041),yellow,.001)
-    _letter(name,"plain","CAUTION",(.296,.661,2.132),.010,rgb(0x403c27),up=(0,0,-1),rise=.00010)
+    mark("plain","CAUTION",(.296,.661,2.132),.010,rgb(0x403c27),up=(0,0,-1),rise=.00010)
     _cord(name,"carMetal","Hood prop rod retained in clip",[(.493,.679,2.135),(.342,.681,2.126),
           (-.345,.681,2.099)],.0046,steel)
 
-    # Fit the complete bay under the lower bonnet, including the radiator carrier.
-    bay=Matrix.Translation(blender_point((0,.029,.056))) @ Matrix.Diagonal((.979,.886,.889,1))
-    for component,*_ in ASSETS[name]["records"]:
-        component.data.transform(bay)
+    # Reference 24 places the battery and intake on the right looking into the
+    # bay from the bumper. Move the labels with their castings without reversing them.
+    bay=Matrix.Translation(blender_point((0,.029,.056))) @ Matrix.Diagonal((-.979,.886,.889,1))
+    mirror_x=Matrix.Diagonal((-1,1,1,1))
+    for component,*_ in records:
+        if component in upright:
+            center=Matrix.Translation((2*upright[component],0,0))
+            component.data.transform(bay @ center @ mirror_x)
+        else:
+            component.data.transform(bay)
+            component.data.flip_normals()
 
     felt=rgb(0x555454)
     _pill(name,"fabric","Full shaped trunk carpet",(0,.343,-1.796),1.402,.912,.053,felt,"y",.37)
-    box(name,"fabric","Lined rear seat bulkhead",(0,.586,-1.335),(1.390,.446,.068),felt,.022)
+    box(name,"fabric","Lined rear seat bulkhead",(0,.586,-1.351),(1.390,.446,.068),felt,.022)
+    _pill(name,"plain","Inset behind rear upper trim cover",(0,.757,-1.391),.151,.073,.013,
+          rgb(0x393831),"z",.38)
+    _pill(name,"gloss","Small tan upper boot bulkhead flap",(0,.756,-1.402),.140,.064,.012,
+          rgb(0x7b725c),"z",.45)
+    _pill(name,"plain","Flush latch on the boot bulkhead flap",(0,.782,-1.408),.051,.009,.004,
+          rgb(0x555045),"z",.46)
     for side in (-1,1):
         _pill(name,"fabric","Trunk liner over wheel housing",(side*.608,.490,-1.677),.271,.437,.266,
               felt,"y",.46)
