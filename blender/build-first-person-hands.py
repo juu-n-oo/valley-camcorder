@@ -23,6 +23,9 @@ UP = Vector((0, 0, 1))
 WRIST = Vector((0, -.003, 0))
 VOXEL = .00074
 THUMB_ROLL = (-12, -27, -37)
+THUMB_CONTROL = "Thumb.Base"
+THUMB_SWING = (-37, 58)
+THUMB_LIFT = (-14, 5, 1.32)
 
 
 @dataclass(frozen=True)
@@ -57,7 +60,7 @@ FINGERS = (
            (.01065,.0087,.0074,.0069), (-.011,.021,-.0012)),
     finger("Little", ((-.033,.084,-.0006),(-.045,.114,.0021),(-.052,.132,.0043),(-.060,.147,.0068)),
            (.00970,.00755,.0065,.0060), (-.022,.018,-.0008)),
-    finger("Thumb", ((.0138,.0220,.0024),(.0448,.0518,.0060),(.0640,.0659,.0095),(.0843,.0760,.0122)),
+    finger("Thumb", ((.0165,.0270,.0057),(.0458,.0572,.0110),(.0650,.0713,.0145),(.0843,.0814,.0172)),
            (.0190,.0126,.0105,.0090), (.011,.013,.0010)),
 )
 
@@ -199,19 +202,19 @@ def sculpt(collection):
         (.006,.102,-.0026,.0219,.0087,.0084),
         (.006,.107,-.0025,.012,.0049,.0050),
     ), collection, rounding=.81)
-    # Shape the two outer hollows before joining the fingers to the palm.
+    # Preserve the lower little knuckle and a shallow curve along the thumb side.
     for vertex in palm.data.vertices:
         p = vertex.co
         p.y -= .0085*smooth(.015,.037,-p.x)*smooth(.069,.100,p.y)
-        p.x -= .0068*smooth(.020,.041,p.x)*gaussian(p.y-.072,.019)
+        p.x -= .0026*smooth(.020,.041,p.x)*gaussian(p.y-.072,.019)
     pieces = [
         volume("Thenar", (
             (.010,.004,.005,.0107,.0072,.0070),
             (.018,.021,.007,.0150,.0123,.0120),
             (.024,.038,.0081,.0155,.0121,.0118),
-            (.030,.053,.0070,.0123,.0092,.0093),
-            (.031,.065,.0044,.0089,.0067,.0067),
-            (.029,.075,.0017,.0045,.0036,.0041),
+            (.031,.053,.0070,.0132,.0098,.0093),
+            (.032,.065,.0048,.0098,.0071,.0068),
+            (.030,.077,.0022,.0050,.0040,.0042),
         ), collection, sides=36),
         volume("Hypothenar", (
             (-.015,.001,.004,.0103,.0076,.0082),
@@ -222,12 +225,13 @@ def sculpt(collection):
             (-.029,.077,.0007,.0068,.0049,.0077),
         ), collection,sides=32),
         volume("Thumb-index web saddle", (
-            (.036,.044,.0000,.0084,.0057,.0054),
-            (.042,.055,.0008,.0082,.0050,.0048),
-            (.041,.061,.0007,.0067,.0039,.0042),
-            (.037,.068,.0003,.0061,.0035,.0039),
-            (.033,.076,-.0001,.0047,.0032,.0035),
-        ), collection,sides=36),
+            (.041,.051,.0005,.0089,.0057,.0052),
+            (.046,.059,.0008,.0083,.0051,.0047),
+            (.046,.066,.0006,.0077,.0046,.0041),
+            (.043,.073,.0001,.0069,.0041,.0037),
+            (.039,.080,-.0004,.0060,.0036,.0035),
+            (.033,.087,-.0008,.0038,.0025,.0029),
+        ), collection,samples=5,sides=40),
         thumb_volume(collection),
     ]
     for spec in FINGERS[:4]:
@@ -256,12 +260,12 @@ def sculpt(collection):
     for vertex in palm.data.vertices:
         p = vertex.co
         web = gaussian(p.y-.090,.015)*.72
-        thenar = gaussian(p.x-.040,.010)*gaussian(p.y-.058,.018)*.80
+        thenar = gaussian(p.x-.042,.016)*gaussian(p.y-.061,.023)*.98
         index_root = gaussian(p.x-.034,.009)*gaussian(p.y-.091,.010)
         blend_junctions.add([vertex.index],max(web,thenar,index_root),"REPLACE")
     blend = palm.modifiers.new("Blend the palm pads and webbing", "SMOOTH")
     blend.vertex_group = blend_junctions.name
-    blend.factor, blend.iterations = .70,20
+    blend.factor, blend.iterations = .72,26
     bpy.ops.object.modifier_apply(modifier=blend.name)
     palm.vertex_groups.clear()
     form_dorsal_surface(palm.data)
@@ -326,21 +330,14 @@ def weights(p):
     if p.y < -.010:
         return result
     candidates = []
-    for spec in FINGERS:
+    for spec in FINGERS[:4]:
         mark, distance = track(p,spec)
-        if spec.name == "Thumb":
-            toward_index = p.y-.055-max(0,p.x-.040)*.48
-            strength = smooth(.025,.050,p.x)*smooth(-.017,.012,mark)*(1-smooth(.013,.032,toward_index))
-        else:
-            strength = smooth(-.051,-.007,mark)*smooth(.033,.072,p.y)
+        strength = smooth(-.051,-.007,mark)*smooth(.033,.072,p.y)
         score = distance/(spec.radii[0]+.001)
         candidates.append((score, mark, strength, spec))
     candidates.sort(key=lambda row:row[0]+(1-row[2])*1.72)
     score, mark, strength, _ = candidates[0]
-    if strength<=.0001:
-        return result
-    # Blend the bones across the shared web at the base of the fingers.
-    # Past the web, each digit has its own independent phalange weights.
+    # Blend neighbouring fingers across their bases before placing the thumb.
     influences = []
     best = score+(1-strength)*1.72
     for distance,at,gain,spec in candidates[:2 if mark<.017 else 1]:
@@ -348,28 +345,66 @@ def weights(p):
         amount = gain*proximity*(1-smooth(1.18,2.5,distance))
         if amount>.0001:
             influences.append((amount,at,spec))
-    if not influences:
-        return result
-    strength = max(row[0] for row in influences)
-    denominator = sum(row[0] for row in influences)
-    for name in result:
-        result[name] *= 1-strength
-    for amount,at,spec in influences:
-        influence = strength*amount/denominator
-        l0, l1, _ = spec.lengths
-        if spec.name == "Thumb":
-            transitions = (1,smooth(l0-.008,l0+.008,at),smooth(l0+l1-.005,l0+l1+.005,at))
-        else:
+    if influences:
+        strength = max(row[0] for row in influences)
+        denominator = sum(row[0] for row in influences)
+        for name in result:
+            result[name] *= 1-strength
+        for amount,at,spec in influences:
+            influence = strength*amount/denominator
+            l0, l1, _ = spec.lengths
             transitions = (smooth(-.008,.008,at),smooth(l0-.006,l0+.006,at),
                            smooth(l0+l1-.0045,l0+l1+.0045,at))
             result[f"{spec.name}.Metacarpal"] = influence*(1-transitions[0])
-        for name, w in zip(spec.joints, (transitions[0]-transitions[1],transitions[1]-transitions[2],transitions[2])):
-            result[name] = influence*w
-    web = .48*gaussian(p.x-.043,.0078)*gaussian(p.y-.061,.010)*gaussian(p.z-.001,.0075)*smooth(.029,.038,p.x)
+            for name, w in zip(spec.joints, (transitions[0]-transitions[1],transitions[1]-transitions[2],transitions[2])):
+                result[name] = influence*w
+
+    thumb = FINGERS[-1]
+    at, _ = track(p,thumb)
+    # The first web runs diagonally into the palm. A continuous falloff keeps
+    # its rim attached even when the thumb crosses the index metacarpal.
+    across = p.x-.45*(p.y-.060)
+    attach = smooth(.011,.061,across)*smooth(.006,.028,p.y)*smooth(-.027,-.001,at)
+    # Dorsal skin over the base stays with the first web. The shaft skin
+    # farther out can follow the thumb independently of the metacarpal fold.
+    dorsal = (1-smooth(-.007,.010,p.z))*(1-smooth(.045,.063,p.x))
+    attach *= 1-.67*dorsal
+    web = .30*4*attach*(1-attach)*gaussian(p.y-.066,.022)
     for name in result:
-        result[name] *= 1-web
+        result[name] *= (1-attach)*(1-web)
+    l0,l1,_ = thumb.lengths
+    hinge = smooth(.039,.058,across)
+    proximal = smooth(l0-.008,l0+.009,at)*hinge
+    distal = smooth(l0+l1-.0055,l0+l1+.0055,at)*hinge
+    result["Thumb.CMC"] = attach*(1-web)*(1-proximal)
+    result["Thumb.MCP"] = attach*(1-web)*(proximal-distal)
+    result["Thumb.IP"] = attach*(1-web)*distal
     result["Thumb.Web"] = web
     return result
+
+
+def steer_thumb(rig, side):
+    control = rig.pose.bones[THUMB_CONTROL]
+    base = rig.pose.bones["Thumb.CMC"]
+    lo, hi = map(math.radians, THUMB_SWING)
+    low, start, ratio = THUMB_LIFT
+    swing = f"min({hi},max({lo},z*{side}))"
+    raise_base = f"{math.radians(low)}+{ratio}*max(0,{swing}-{math.radians(start)})"
+    for index, (channels, expr) in enumerate((
+        ("xz", f"max(x,{raise_base})"),
+        ("y", "y"),
+        ("z", f"{side}*({swing})"),
+    )):
+        driver = base.driver_add("rotation_euler",index).driver
+        driver.type = "SCRIPTED"
+        for channel in channels:
+            var = driver.variables.new()
+            var.name = channel
+            var.type = "SINGLE_PROP"
+            var.targets[0].id = rig
+            axis = "xyz".index(channel)
+            var.targets[0].data_path = control.path_from_id("rotation_euler")+f"[{axis}]"
+        driver.expression = expr
 
 
 def make_rig(collection, side):
@@ -404,7 +439,9 @@ def make_rig(collection, side):
             add(name,head,tail,parent,i>0 or spec.name!="Thumb",
                 THUMB_ROLL[i] if spec.name=="Thumb" else 0)
             parent = name
-    add("Thumb.Web",(.030,.055,.001),(.056,.075,.003),"Palm",roll=THUMB_ROLL[0])
+    thumb_root,thumb_knuckle,*_ = FINGERS[-1].points
+    add(THUMB_CONTROL,thumb_root,thumb_knuckle,"Palm",roll=THUMB_ROLL[0]).use_deform = False
+    add("Thumb.Web",thumb_root,thumb_knuckle,"Palm",roll=THUMB_ROLL[0])
     bpy.ops.object.mode_set(mode="OBJECT")
 
     hand_bones = data.collections.new("Forearm, wrist and palm")
@@ -424,18 +461,26 @@ def make_rig(collection, side):
         elif name=="Thumb.Web":
             tissue.assign(pose.bone)
             follow = pose.constraints.new("COPY_ROTATION")
-            follow.name = "Share the thumb base rotation"
+            follow.name = "Follow the base lift through the first web"
             follow.target = rig
             follow.subtarget = "Thumb.CMC"
             follow.target_space = follow.owner_space = "LOCAL"
-            follow.influence = .33
-        elif name.startswith("Thumb"):
+            follow.use_y = follow.use_z = False
+            follow.influence = .40
+        elif name==THUMB_CONTROL:
             thumb.assign(pose.bone)
+            pose.lock_location = pose.lock_scale = (True,True,True)
+            swing = THUMB_SWING if side>0 else (-THUMB_SWING[1],-THUMB_SWING[0])
+            limits = ((-25,64),(-53,53),swing)
+        elif name.startswith("Thumb"):
             if name.endswith("CMC"):
-                limits = ((-34,68),(-58,58),(-65,65))
+                tissue.assign(pose.bone)
+                limits = ((-25,64),(-53,53),(-58,58))
             elif name.endswith("MCP"):
+                thumb.assign(pose.bone)
                 limits = ((-12,69),(-5,5),(-8,8))
             else:
+                thumb.assign(pose.bone)
                 limits = ((-15,80),(0,0),(0,0))
                 pose.lock_rotation = (False,True,True)
         else:
@@ -450,6 +495,7 @@ def make_rig(collection, side):
                 setattr(locked,"use_limit_"+axis,True)
                 setattr(locked,"min_"+axis,math.radians(low))
                 setattr(locked,"max_"+axis,math.radians(high))
+    steer_thumb(rig,side)
     tissue.is_visible = False
     rig["Joint convention"] = "Local X is flexion. The thumb CMC also rotates and opposes on Y and Z."
     rig["Pose review"] = "Frames 28, 39 and 49 show the thumb hinges. Frames 80, 112 and 148 show contact poses."
@@ -468,7 +514,7 @@ def bind(obj, rig):
 
 
 def skin_weights(source, rig):
-    groups = [source.vertex_groups.new(name=bone.name) for bone in rig.data.bones]
+    groups = [source.vertex_groups.new(name=bone.name) for bone in rig.data.bones if bone.use_deform]
     indices = {group.name:group.index for group in groups}
     values = np.zeros((len(source.data.vertices),len(groups)),dtype=np.float32)
     coordinates = np.empty((len(values),3),dtype=np.float32)
@@ -508,6 +554,15 @@ def skin_weights(source, rig):
     relax = source.modifiers.new("Soften joint folds","CORRECTIVE_SMOOTH")
     relax.factor,relax.iterations = .64,13
     relax.smooth_type = "LENGTH_WEIGHTED"
+    web_group = source.vertex_groups.new(name="First web surface")
+    for vertex in source.data.vertices:
+        x,y,z = vertex.co
+        amount = gaussian(x-.037,.013)*gaussian(y-.072,.016)*(.57+.43*(1-smooth(-.003,.009,z)))
+        if amount>.015:
+            web_group.add([vertex.index],amount,"REPLACE")
+    fold = source.modifiers.new("Round the compressed first web","SMOOTH")
+    fold.vertex_group = web_group.name
+    fold.factor,fold.iterations = .72,14
 
 
 PALM_LINES = (
@@ -733,147 +788,22 @@ def mirrored(original, rig, collection):
 
 
 POSES = (
-    (1,"Relaxed",((8,17,8),(11,23,11),(14,27,15),(19,31,18)),(15,5,6),(13,10),(-6,0,4),-13),
+    (1,"Relaxed",((8,17,8),(11,23,11),(14,27,15),(19,31,18)),(27,5,5),(13,10),(-6,0,4),-13),
     (28,"Open",((1,2,1),(2,4,2),(4,6,4),(6,10,5)),(-7,-4,-12),(4,7),(2,0,-2),-2),
     (39,"Thumb knuckle bends",((2,4,1),(3,4,2),(5,8,5),(8,11,5)),(-5,-3,-11),(34,9),(3,1,-3),8),
     (49,"Thumb tip curls",((3,5,2),(5,7,3),(8,11,6),(12,15,8)),(-3,-2,-10),(35,46),(5,1,-4),16),
-    (59,"Thumb turns in",((11,25,13),(17,34,20),(26,45,24),(36,54,31)),(29,23,26),(31,30),(7,2,-2),23),
-    (69,"Fingers close",((55,76,43),(66,84,49),(70,90,56),(73,90,57)),(33,27,42),(32,23),(10,3,1),31),
-    (80,"Closed hand",((72,92,54),(75,94,59),(77,95,61),(77,95,61)),(35,29,48),(34,29),(11,3,2),34),
-    (95,"Open to reach",((19,30,14),(24,40,19),(31,50,24),(39,58,35)),(25,12,14),(16,14),(0,2,-2),19),
-    (112,"Pinch",((38,58,37),(29,63,25),(39,69,34),(47,73,41)),(28,25,39),(29,27),(-7,3,-4),8),
-    (126,"Pinch holds",((38,58,37),(29,63,25),(39,69,34),(47,73,41)),(28,25,39),(29,27),(-8,2,-4),-7),
-    (148,"Rounded grip",((42,61,27),(46,68,29),(50,73,35),(55,76,38)),(28,24,33),(32,29),(6,-3,2),-17),
+    (54,"Thumb lifts",((7,12,7),(10,18,9),(16,23,12),(20,29,16)),(22,5,-4),(31,35),(6,1,-3),21),
+    (59,"Thumb turns in",((11,25,13),(17,34,20),(26,45,24),(36,54,31)),(34,11,15),(29,27),(7,2,-2),23),
+    (69,"Fingers close",((55,76,43),(66,84,49),(70,90,56),(73,90,57)),(38,15,22),(24,21),(10,3,1),31),
+    (80,"Closed hand",((69,90,52),(75,94,59),(77,95,61),(77,95,61)),(34,12,23),(14,15),(11,3,2),34),
+    (87,"Thumb releases",((48,67,38),(58,76,44),(63,81,49),(66,85,54)),(35,10,8),(17,17),(7,3,0),31),
+    (95,"Open to reach",((19,30,14),(24,40,19),(31,50,24),(39,58,35)),(31,9,8),(16,14),(0,2,-2),19),
+    (112,"Pinch",((72.5,20,33.5),(29,63,25),(39,69,34),(47,73,41)),(38,-1.5,15),(9,7),(-7,3,-4),8),
+    (126,"Pinch holds",((72.5,20,33.5),(29,63,25),(39,69,34),(47,73,41)),(38,-1.5,15),(9,7),(-8,2,-4),-7),
+    (148,"Rounded grip",((42,61,27),(46,68,29),(50,73,35),(55,76,38)),(35,12,16),(28,25),(6,-3,2),-17),
     (167,"Uncurl",((9,12,5),(12,14,8),(18,19,10),(22,25,13)),(7,5,-9),(6,9),(-2,-2,2),-28),
-    (180,"Release",((8,17,8),(11,23,11),(14,27,15),(19,31,18)),(15,5,6),(13,10),(-6,0,4),-14),
+    (180,"Release",((8,17,8),(11,23,11),(14,27,15),(19,31,18)),(27,5,5),(13,10),(-6,0,4),-14),
 )
-
-
-def pad_pose(rig, finger_name, matrices):
-    spec = next(spec for spec in FINGERS if spec.name==finger_name)
-    bone_name = spec.joints[-1]
-    bone = rig.data.bones[bone_name]
-    length = bone.length
-    matrix = matrices[bone_name]
-    return matrix @ Vector((0,length*.83,spec.radii[-1]*.64)),matrix.to_3x3() @ UP
-
-
-def pinch_matrices(rig):
-    """Evaluate the same local transforms as FK without touching the scene."""
-    result = {}
-    for bone in rig.pose.bones:
-        rest = bone.bone.matrix_local
-        rotation = bone.rotation_euler.to_matrix().to_4x4()
-        if bone.parent:
-            result[bone.name] = result[bone.parent.name] @ bone.parent.bone.matrix_local.inverted() @ rest @ rotation
-        else:
-            result[bone.name] = rest @ rotation
-    return result
-
-
-def rotation_controls(rig, side, limits):
-    values = []
-    for name, axis, low, high in limits:
-        bone = rig.pose.bones[name]
-        sign = side if axis>0 else 1
-        start = math.degrees(bone.rotation_euler[axis])*sign
-        values.append((bone,axis,low,high,sign,start))
-    return values
-
-
-def solve_rotation(controls, cost):
-    best = cost()
-    for step in (14,8,4,2,1,.5):
-        for _ in range(4):
-            for bone,axis,low,high,sign,_ in controls:
-                start = math.degrees(bone.rotation_euler[axis])*sign
-                accepted = start
-                for direction in (-1,1):
-                    candidate = clamp(start+step*direction,low,high)
-                    bone.rotation_euler[axis] = math.radians(candidate)*sign
-                    value = cost()
-                    if value<best:
-                        accepted,best = candidate,value
-                bone.rotation_euler[axis] = math.radians(accepted)*sign
-
-
-def angular_effort(controls):
-    return sum((math.degrees(b.rotation_euler[a])*s-preferred)**2 for b,a,_,_,s,preferred in controls)
-
-
-def thumb_palm_clearance(rig, side, matrices):
-    """Clearance between both thumb phalanges and the palm and thenar pads."""
-    to_palm_rest = rig.data.bones["Palm"].matrix_local @ matrices["Palm"].inverted()
-    clearance = math.inf
-    for name, fractions in (("Thumb.MCP",(.22,.43,.66,1)),("Thumb.IP",(.28,.57,.84))):
-        length = rig.data.bones[name].length
-        local = to_palm_rest @ matrices[name]
-        for fraction in fractions:
-            x,y,z = local @ Vector((0,length*fraction,0))
-            radius = mix(.0067,.0052,fraction) if name.endswith("IP") else mix(.0079,.0068,fraction)
-            x *= side
-            for cx,cy,cz,rx,ry,rz in ((.0,.046,.0,.039,.054,.019),(.024,.043,.006,.017,.032,.016)):
-                distance = math.sqrt(((x-cx)/(rx+radius))**2+((y-cy)/(ry+radius))**2+((z-cz)/(rz+radius))**2)
-                clearance = min(clearance,(distance-1)*(rz+radius))
-    return clearance
-
-
-def fit_pinch(rig, side):
-    index = rig.pose.bones["Index.MCP"]
-    index.rotation_euler.x = math.radians(39)
-    rig.pose.bones["Index.PIP"].rotation_euler.x = math.radians(65)
-    limits = (
-        ("Index.MCP",0,18,68),("Index.MCP",2,-26,12),
-        ("Index.PIP",0,26,92),("Index.DIP",0,13,69),
-        ("Thumb.CMC",0,5,65),("Thumb.CMC",1,-28,54),("Thumb.CMC",2,12,65),
-        ("Thumb.MCP",0,17,67),("Thumb.IP",0,16,65),
-    )
-    controls = rotation_controls(rig,side,limits)
-
-    def cost():
-        pose = pinch_matrices(rig)
-        pad_a, facing_a = pad_pose(rig,"Index",pose)
-        pad_b, facing_b = pad_pose(rig,"Thumb",pose)
-        separation = (pad_a-pad_b).length_squared
-        facing = max(0,facing_a.normalized().dot(facing_b.normalized())+.58)
-        penetration = min(0,thumb_palm_clearance(rig,side,pose)-.002)
-        return separation+facing*facing*.000038+angular_effort(controls)*.000000004+9*penetration**2
-
-    solve_rotation(controls,cost)
-    pose = pinch_matrices(rig)
-    gap = (pad_pose(rig,"Index",pose)[0]-pad_pose(rig,"Thumb",pose)[0]).length
-    if gap>.008:
-        raise RuntimeError(f"The pinch pads are {gap*1000:.1f} mm apart")
-    print(f"{rig.name} pinch pad gap {gap*1000:.1f} mm")
-
-
-def fist_contact(rig, side, matrices):
-    phalanx = rig.data.bones["Index.PIP"]
-    p = matrices[phalanx.name]
-    normal = Vector((.79*side,0,-.61)).normalized()
-    return p @ (Vector((0,phalanx.length*.83,0))+normal*.0105), p.to_3x3() @ normal
-
-
-def fit_fist_thumb(rig, side):
-    target,normal = fist_contact(rig,side,pinch_matrices(rig))
-    target += normal*.0006
-    controls = rotation_controls(rig,side,(
-        ("Thumb.CMC",0,7,65),("Thumb.CMC",1,-25,53),("Thumb.CMC",2,12,65),
-        ("Thumb.MCP",0,17,64),("Thumb.IP",0,16,65),
-    ))
-
-    def cost():
-        pose = pinch_matrices(rig)
-        thumb,facing = pad_pose(rig,"Thumb",pose)
-        angle = max(0,facing.normalized().dot(normal.normalized())+.40)
-        penetration = min(0,thumb_palm_clearance(rig,side,pose)-.001)
-        return (thumb-target).length_squared+angle*angle*.000048+angular_effort(controls)*.000000005+9*penetration**2
-
-    solve_rotation(controls,cost)
-    gap = (pad_pose(rig,"Thumb",pinch_matrices(rig))[0]-target).length
-    if gap>.012:
-        raise RuntimeError(f"The thumb is too far from the outside of the closed index ({gap*1000:.1f} mm)")
-    print(f"{rig.name} closed thumb gap {gap*1000:.1f} mm")
 
 
 def animate(scene, rig, side, add_labels=False):
@@ -882,7 +812,8 @@ def animate(scene, rig, side, add_labels=False):
         if add_labels:
             scene.timeline_markers.new(label,frame=frame)
         for bone in rig.pose.bones:
-            bone.rotation_euler = (0,0,0)
+            if bone.name != "Thumb.CMC":
+                bone.rotation_euler = (0,0,0)
         rig.pose.bones["Forearm"].rotation_euler.y = math.radians(swivel*side)
         rig.pose.bones["Wrist"].rotation_euler = tuple(math.radians(v) for v in (wrist[0],wrist[1]*side,wrist[2]*side))
         rigid = sum(bend[0] for bend in bends)/4/76
@@ -896,16 +827,12 @@ def animate(scene, rig, side, add_labels=False):
                 pose = rig.pose.bones[name]
                 pose.rotation_euler.x = math.radians(bend[j])
                 if j==0:
-                    pose.rotation_euler.z = math.radians(splay+(-5.5*side if frame in (112,126) and i==0 else 0))
-        rig.pose.bones["Thumb.CMC"].rotation_euler = tuple(math.radians(v) for v in (thumb[0],thumb[1]*side,thumb[2]*side))
+                    pose.rotation_euler.z = math.radians(15*side if frame in (112,126) and i==0 else splay)
+        rig.pose.bones[THUMB_CONTROL].rotation_euler = tuple(math.radians(v) for v in (thumb[0],thumb[1]*side,thumb[2]*side))
         rig.pose.bones["Thumb.MCP"].rotation_euler.x = math.radians(thumb_tip[0])
         rig.pose.bones["Thumb.IP"].rotation_euler.x = math.radians(thumb_tip[1])
-        if frame==80:
-            fit_fist_thumb(rig,side)
-        if frame in (112,126):
-            fit_pinch(rig,side)
         for pose in rig.pose.bones:
-            if pose.name!="Thumb.Web":
+            if pose.name not in ("Thumb.CMC","Thumb.Web"):
                 pose.keyframe_insert(data_path="rotation_euler",frame=frame,group=pose.name)
     animation = rig.animation_data
     animation.action.name = "Hand pose study."+("R" if side>0 else "L")
@@ -950,16 +877,16 @@ def studio(scene, collection):
     camera = bpy.data.objects.new("Hands review camera",camera_data)
     collection.objects.link(camera)
     camera_angles = (
-        (1,(.011,-.061,.61),(.006,.043,.045),.478),
-        (28,(.030,-.056,.60),(.007,.043,.042),.484),
-        (39,(.343,-.029,.40),(.111,.079,.050),.280),
-        (49,(.400,.008,.365),(.112,.079,.055),.246),
-        (59,(.390,.024,.370),(.112,.076,.055),.245),
-        (80,(.299,-.042,.46),(.106,.067,.055),.244),
-        (111,(.235,.012,.50),(.109,.084,.052),.243),
-        (129,(.206,-.017,.53),(.110,.085,.050),.253),
+        (1,(.002,-.061,.61),(-.015,.043,.045),.514),
+        (28,(.022,-.056,.60),(-.014,.043,.042),.517),
+        (39,(.351,-.025,.40),(.116,.078,.055),.282),
+        (49,(.426,.028,.322),(.122,.079,.064),.257),
+        (59,(.437,.027,.286),(.117,.073,.069),.246),
+        (80,(.340,-.039,.402),(.112,.069,.061),.251),
+        (111,(.376,.059,.370),(.114,.081,.069),.246),
+        (129,(.375,.047,.360),(.114,.083,.063),.252),
         (151,(.124,-.034,.58),(.068,.052,.044),.351),
-        (180,(.012,-.066,.62),(.007,.043,.041),.478),
+        (180,(.002,-.066,.62),(-.015,.043,.041),.514),
     )
     for frame,at,look,width in camera_angles:
         camera.location = at
@@ -998,9 +925,28 @@ def studio(scene, collection):
     scene.view_settings.exposure = -.28
 
 
+def thumb_palm_patches(skin):
+    names = {group.index: group.name for group in skin.vertex_groups}
+    thumb, palm = set(), set()
+    for vertex in skin.data.vertices:
+        x, y, z = vertex.co
+        phalanges = sum(link.weight for link in vertex.groups
+                        if names[link.group] in ("Thumb.MCP", "Thumb.IP"))
+        if x > .048 and phalanges > .58:
+            thumb.add(vertex.index)
+        if z > .004 and -.042 < x < .045 and .017 < y < .103 and phalanges < .25:
+            palm.add(vertex.index)
+    skin.data.calc_loop_triangles()
+    triangles = [tuple(face.vertices) for face in skin.data.loop_triangles]
+    patches = tuple([face for face in triangles if region.issuperset(face)]
+                    for region in (thumb, palm))
+    if not all(patches):
+        raise RuntimeError("Could not find the thumb and palmar skin patches")
+    return patches
+
+
 def validate(skin, right, left, scene):
-    # Inspect the editable asset before saving and the skinned mesh at each
-    # extreme pose. This catches isolated islands, holes and invalid weights.
+    # Check the editable skin and its deformed surface through the whole motion.
     bm = bmesh.new()
     bm.from_mesh(skin.data)
     if any(not edge.is_manifold for edge in bm.edges):
@@ -1018,13 +964,14 @@ def validate(skin, right, left, scene):
     if len(seen)!=len(bm.verts):
         raise RuntimeError(f"Skin has {len(bm.verts)-len(seen)} disconnected vertices")
     bm.free()
-    roles = {g.index:0 for g in skin.vertex_groups}
+    roles = {g.index:0 for g in skin.vertex_groups if right.data.bones.get(g.name)}
     for vertex in skin.data.vertices:
-        if not vertex.groups or len(vertex.groups)>6 or abs(sum(g.weight for g in vertex.groups)-1)>.0003:
+        deform = [g for g in vertex.groups if g.group in roles]
+        if not deform or len(deform)>6 or abs(sum(g.weight for g in deform)-1)>.0003:
             raise RuntimeError("Skin weights are not normalized")
-        for link in vertex.groups:
+        for link in deform:
             roles[link.group] += 1
-    if min(roles.values())<14 or any(len(rig.data.bones)!=23 for rig in (right,left)):
+    if min(roles.values())<14 or any(sum(b.use_deform for b in rig.data.bones)!=23 for rig in (right,left)):
         raise RuntimeError("A deform joint is missing or has insufficient weights")
     edge = np.empty((len(skin.data.edges),2),dtype=np.int32)
     coordinates = np.empty((len(skin.data.vertices),3),dtype=np.float32)
@@ -1033,17 +980,28 @@ def validate(skin, right, left, scene):
     a,b = edge.T
     length = np.linalg.norm(coordinates[a]-coordinates[b],axis=1)
     mask = length>.0009
-    for frame, label, *_ in POSES:
+    thumb_patch, palm_patch = thumb_palm_patches(skin)
+    labels = {frame: label for frame, label, *_ in POSES}
+    for frame in range(scene.frame_start, scene.frame_end+1):
         scene.frame_set(frame)
-        bpy.context.view_layer.update()
         posed = skin.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
-        if len(posed.vertices)!=len(skin.data.vertices) or any(not math.isfinite(c) for v in posed.vertices for c in v.co):
+        label = labels.get(frame, f"frame {frame}")
+        if len(posed.vertices)!=len(skin.data.vertices):
             raise RuntimeError(f"Invalid skin at {label}")
         posed.vertices.foreach_get("co",coordinates.ravel())
-        changes = np.linalg.norm(coordinates[a]-coordinates[b],axis=1)[mask]/length[mask]
-        if np.quantile(changes,.99)>2.25:
-            raise RuntimeError(f"Excessive skin stretching at {label}")
+        if not np.isfinite(coordinates).all():
+            raise RuntimeError(f"Invalid skin at {label}")
+        points = [vertex.co.copy() for vertex in posed.vertices]
+        thumb = BVHTree.FromPolygons(points, thumb_patch, all_triangles=True)
+        palm = BVHTree.FromPolygons(points, palm_patch, all_triangles=True)
+        if thumb.overlap(palm):
+            raise RuntimeError(f"Thumb skin intersects the palm at {label}")
+        if frame in labels:
+            changes = np.linalg.norm(coordinates[a]-coordinates[b],axis=1)[mask]/length[mask]
+            if np.quantile(changes,.99)>2.25:
+                raise RuntimeError(f"Excessive skin stretching at {label}")
     print(f"Validated {len(skin.data.vertices):,} vertices, 22 anatomical deform bones and a thumb web support per hand.",flush=True)
+    print(f"Checked thumb–palm surface clearance on all {scene.frame_end-scene.frame_start+1} frames.",flush=True)
 
 
 def configure_workspace(scene, hand):
@@ -1067,7 +1025,8 @@ def configure_workspace(scene, hand):
                 "The right palm and left dorsal hand are displayed side by side at real scale.\n"
                 "The timeline shows the opening thumb, the first web folding, fist closure and fingertip opposition.\n"
                 "Select Hand rig.R or Hand rig.L in the Outliner and enter Pose Mode to edit individual joints.\n"
-                "Local X is flexion. The rolled thumb frame follows the pad orientation. Thumb.Web stabilizes the skin.\n"
+                "Rotate Thumb.Base for opposition. It raises the metacarpal as you swing the thumb in toward the palm.\n"
+                "Local X bends the independent Thumb.MCP and Thumb.IP hinges. Thumb.Web distributes the skin fold.\n"
                 "The studio and removable preview cuffs are organized in their own collections.\n")
 
 
@@ -1134,7 +1093,7 @@ def main():
     sleeve(left,-1,costume,fabric)
     right.location = (.089,-.006,.050)
     right.rotation_euler.z = math.radians(-10)
-    left.location = (-.088,.001,.054)
+    left.location = (-.138,.001,.054)
     left.rotation_euler = (0,math.pi,math.radians(9))
     animate(scene,right,1,True)
     animate(scene,left,-1)
