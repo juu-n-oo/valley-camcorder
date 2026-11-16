@@ -184,7 +184,7 @@ namespace ValleyCamcorder
                     // Ring and little fingers settle first. The thumb rolls in
                     // separately and the distal joints follow the knuckles.
                     var thumb=i==4;
-                    var start=thumb ? .25f : .14f-i*.043f;
+                    var start=thumb ? .34f : .14f-i*.043f;
                     var curl=Mathf.SmoothStep(0,1,Mathf.InverseLerp(start,.90f,closing));
                     if(trigger>=0 && i==0) curl=Mathf.Lerp(.32f,.80f,indexPressure);
                     for(var joint=0;joint<3;joint++)

@@ -461,6 +461,26 @@ def _body_shell():
     _pill(name,"plain","Rubber exhaust isolation hanger",(-.405,.336,-1.940),
           .035,.047,.018,rgb(0x23241f),"z",.49)
     box(name,"plain","Recessed underbody floor pan",(0,.216,-.12),(1.32,.066,3.54),SEDAN_BLACK,.028)
+    _jamb_hardware(name)
+
+
+def _jamb_hardware(name):
+    for side in (-1,1):
+        for z,y in ((-.287,.561),(-1.205,.575)):
+            x=side*.792
+            box(name,"carPaint","Pressed inner door jamb",(x,.577,z),(.050,.514,.082),SEDAN_PAINT,.014)
+            _pill(name,"carMetal","Zinc-plated striker mounting plate",(side*.820,y,z),
+                  .047,.096,.009,rgb(0x969c99),"x",.47)
+            for tilt in (-1,1):
+                bolt=(side*.827,y+tilt*.033,z-tilt*.009)
+                lathe(name,"carMetal","Recessed striker fastener",[(0,.0066,.0066),(side*.0027,.0062,.0062)],
+                      rgb(0xb3b9b7),16,bolt,"x")
+                _cord(name,"plain","Fastener drive recess",
+                      [_add(bolt,(side*.0032,dy,dz)) for dy,dz in ((-.002,-.002),(.002,.002))],
+                      .00082,rgb(0x383b3c),sides=4)
+            loop=catmull([(side*.823,y-.019,z),(side*.838,y-.015,z+.002),
+                          (side*.843,y,z+.005),(side*.838,y+.015,z+.002),(side*.823,y+.019,z)],4)
+            _cord(name,"carMetal","Rounded door latch striker loop",loop,.0038,SEDAN_ALLOY,sides=9)
 
 
 def _front_fascia(name):
@@ -892,10 +912,39 @@ def _green_glass(front):
         color=rgb(0x475e5b) if front else rgb(0x3c4b4b)
         if front:
             return _lerp(color,rgb(0x344f61),.76*smooth(1.297,1.397,p[1]))
-        # Heated rear glass keeps a warmer, narrow tint at each heater wire.
-        wire = max(0,cos((p[2]-SEDAN_REAR_GLASS)*tau/.061))**22
-        return _lerp(color,rgb(0x665748),wire*.46)
+        return color
     return tint
+
+
+def _rear_glass_heater(glass,pane):
+    def inside(u,v):
+        return _add(pane(u,v),(0,-.00085,.00057))
+
+    copper=rgb(0xaa7449)
+    first,last=.086,.909
+    for i,at in enumerate(blend(first,last,t) for t in _range(12)):
+        wire=_panel(glass,"carGlass",f"Rear demister trace {i+1:02}",44,1,
+                    lambda u,v:inside(blend(.051,.949,u),at+(v-.5)*.00126),copper,True)
+        wire["finish_override"]="Rear demister print"
+    for offset in (.051,.949):
+        bus=_panel(glass,"carGlass","Screen-printed edge busbar",1,42,
+                   lambda u,v:inside(offset+(u-.5)*.0046,blend(first-.009,last+.006,v)),
+                   rgb(0x855336),True)
+        bus["finish_override"]="Rear demister print"
+        contact=_panel(glass,"carGlass","Rear window heater terminal contact",1,4,
+                       lambda u,v:inside(offset+(u-.5)*.013,blend(.047,.081,v)),
+                       rgb(0x775e42),True)
+        contact["finish_override"]="Rear demister print"
+
+
+def _glazing_pane(front):
+    glass=_sedan_asset("windshield" if front else "back_glass")
+    def pane(u,v):
+        return _end_glass_point(front,u,v)
+    _panel(glass,"carGlass","Compound curved laminated glass" if front else "Heated rear window",
+           32,24 if front else 38,pane,_green_glass(front),True)
+    if not front:
+        _rear_glass_heater(glass,pane)
 
 
 def _roof_and_glazing():
@@ -908,11 +957,9 @@ def _roof_and_glazing():
     _panel(roof,"fabric","Felt headliner",16,20,lambda u,v:roof_panel(u,v,.034),rgb(0xa49a84))
 
     for front in (False,True):
-        glass=_sedan_asset("windshield" if front else "back_glass")
+        _glazing_pane(front)
         def pane(u,v):
             return _end_glass_point(front,u,v)
-        _panel(glass,"carGlass","Compound curved laminated glass" if front else "Heated rear window",
-               32,38 if not front else 24,pane,_green_glass(front),True)
         for edge in (0,1):
             line=[pane(t,edge) for t in _range(31)]
             _cord(roof,"plain","Glazing encapsulated seal",line,.006,rgb(0x1d2021))

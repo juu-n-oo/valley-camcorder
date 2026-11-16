@@ -153,11 +153,11 @@ def digit_volume(spec, collection):
         (a, r0, r0*.94, r0*.85),
         (a.lerp(b,.48)+Vector((0,0,.0008)),r0*.91,r0*.98,r0*.77),
         (b-(b-a).normalized()*.005,r1*.96,r1*.91,r1*.89),
-        (b,r1*1.025,r1*.92,r1*.98),
+        (b,r1*1.035,r1*.91,r1*1.015),
         (b.lerp(c,.46),r1*.91,r1*.88,r1*.78),
         (c,r2*1.02,r2*.91,r2*.91),
-        (c.lerp(d,.49)+Vector((0,0,.00075)),tip*1.03,tip*1.00,tip*.75),
-        (c.lerp(d,.75),tip*.88,tip*.87,tip*.68),
+        (c.lerp(d,.49)+Vector((0,0,.00075)),tip*1.01,tip*1.015,tip*.72),
+        (c.lerp(d,.75),tip*.88,tip*.89,tip*.66),
         (c.lerp(d,.91),tip*.65,tip*.68,tip*.55),
         (c.lerp(d,.978),tip*.36,tip*.41,tip*.33),
         (d,tip*.10,tip*.13,tip*.12),
@@ -227,20 +227,20 @@ def sculpt(collection):
         # Start the saddle inside the palm so its end cap cannot appear as a
         # step on the back of the thumb when the skin bends.
         volume("Thumb-index web saddle", (
-            (.025,.026,-.0027,.0041,.0040,.0042),
-            (.033,.037,-.0021,.0076,.0050,.0080),
-            (.039,.048,-.0017,.0092,.0060,.0093),
-            (.044,.057,-.0008,.0091,.0055,.0071),
-            (.046,.065,.0003,.0080,.0046,.0050),
-            (.043,.073,.0000,.0069,.0041,.0037),
-            (.039,.080,-.0005,.0060,.0036,.0034),
-            (.033,.087,-.0010,.0038,.0025,.0029),
+            (.025,.026,-.0023,.0040,.0038,.0043),
+            (.033,.037,-.0019,.0067,.0046,.0074),
+            (.039,.048,-.0012,.0081,.0058,.0081),
+            (.0435,.057,-.0003,.0082,.0052,.0062),
+            (.045,.065,.0005,.0074,.0043,.0048),
+            (.043,.073,.0000,.0066,.0039,.0040),
+            (.039,.080,-.0005,.0056,.0033,.0034),
+            (.033,.087,-.0010,.0040,.0028,.0029),
         ), collection,samples=5,sides=40),
         thumb_volume(collection),
     ]
     for spec in FINGERS[:4]:
         pieces.append(digit_volume(spec, collection))
-    for (a,b), rise in zip(zip(FINGERS[:3], FINGERS[1:4]), (.0048,.0040,.0013)):
+    for (a,b), rise in zip(zip(FINGERS[:3], FINGERS[1:4]), (.0048,.0036,.0007)):
         center = a.points[0].lerp(b.points[0],.50)-Vector((0,.005,.0013))
         lateral = (a.points[0].x-b.points[0].x)*.5
         pieces.append(volume(f"{a.name}–{b.name} web saddle", (
@@ -269,12 +269,12 @@ def sculpt(collection):
         blend_junctions.add([vertex.index],max(web,thenar,index_root),"REPLACE")
     blend = palm.modifiers.new("Blend the palm pads and webbing", "SMOOTH")
     blend.vertex_group = blend_junctions.name
-    blend.factor, blend.iterations = .72,26
+    blend.factor, blend.iterations = .72,30
     bpy.ops.object.modifier_apply(modifier=blend.name)
     palm.vertex_groups.clear()
     form_dorsal_surface(palm.data)
     reducer = palm.modifiers.new("Hand topology density", "DECIMATE")
-    reducer.ratio = .19
+    reducer.ratio = .225
     bpy.ops.object.modifier_apply(modifier=reducer.name)
     recalculate(palm.data)
     for face in palm.data.polygons:
@@ -368,12 +368,12 @@ def weights(p):
     # The first web runs diagonally into the palm. A continuous falloff keeps
     # its rim attached even when the thumb crosses the index metacarpal.
     across = p.x-.45*(p.y-.060)
-    attach = smooth(.011,.061,across)*smooth(.006,.028,p.y)*smooth(-.027,-.001,at)
+    attach = smooth(.010,.063,across)*smooth(.004,.030,p.y)*smooth(-.028,.000,at)
     # Dorsal skin over the base stays with the first web. The shaft skin
     # farther out can follow the thumb independently of the metacarpal fold.
     dorsal = (1-smooth(-.007,.010,p.z))*(1-smooth(.045,.063,p.x))
-    attach *= 1-.67*dorsal
-    web = .30*4*attach*(1-attach)*gaussian(p.y-.066,.022)
+    attach *= 1-.60*dorsal
+    web = .42*4*attach*(1-attach)*gaussian(p.y-.064,.024)
     for name in result:
         result[name] *= (1-attach)*(1-web)
     l0,l1,_ = thumb.lengths
@@ -465,12 +465,12 @@ def make_rig(collection, side):
         elif name=="Thumb.Web":
             tissue.assign(pose.bone)
             follow = pose.constraints.new("COPY_ROTATION")
-            follow.name = "Follow the base lift through the first web"
+            follow.name = "Follow a fraction of the thumb base lift"
             follow.target = rig
             follow.subtarget = "Thumb.CMC"
             follow.target_space = follow.owner_space = "LOCAL"
             follow.use_y = follow.use_z = False
-            follow.influence = .40
+            follow.influence = .23
         elif name==THUMB_CONTROL:
             thumb.assign(pose.bone)
             pose.lock_location = pose.lock_scale = (True,True,True)
@@ -542,8 +542,8 @@ def skin_weights(source, rig):
     width = coordinates[:,0]
     depth = coordinates[:,1]
     web = np.exp(-.5*((depth-.093)/.019)**2)
-    thumb = np.exp(-.5*(((width-.046)/.020)**2+((depth-.067)/.027)**2))
-    smoothing = (.25+.55*np.maximum(web,thumb))[:,None]
+    thumb = np.exp(-.5*(((width-.040)/.020)**2+((depth-.065)/.025)**2))
+    smoothing = (.27+.58*np.maximum(web,thumb))[:,None]
     for _ in range(24):
         average = np.zeros_like(values)
         np.add.at(average,neighborhood,values[neighbors]*edge_weight[:,None])
@@ -566,14 +566,15 @@ def skin_weights(source, rig):
             web_group.add([vertex.index],amount,"REPLACE")
     fold = source.modifiers.new("Round the compressed first web","SMOOTH")
     fold.vertex_group = web_group.name
-    fold.factor,fold.iterations = .72,14
+    fold.factor,fold.iterations = .76,27
 
 
 PALM_LINES = (
-    ((.032,.086),(.023,.080),(.015,.070),(.010,.053),(.009,.035),(.015,.017),(.022,.008)),
-    ((-.036,.065),(-.027,.079),(-.013,.081),(.001,.076),(.016,.073),(.029,.078)),
-    ((-.033,.053),(-.022,.059),(-.011,.066),(.002,.063),(.017,.057),(.025,.062)),
-    ((.026,.016),(.033,.021),(.038,.027),(.042,.035)),
+    ((.033,.089),(.024,.082),(.015,.071),(.010,.053),(.009,.035),(.014,.018),(.020,.008)),
+    ((-.036,.066),(-.027,.078),(-.013,.081),(.002,.077),(.016,.074),(.030,.081)),
+    ((-.035,.050),(-.024,.060),(-.011,.065),(.002,.063),(.017,.057),(.028,.062)),
+    ((.025,.014),(.032,.020),(.037,.027),(.041,.036)),
+    ((-.025,.021),(-.021,.032),(-.015,.044),(-.008,.049)),
 )
 
 
@@ -585,17 +586,20 @@ def skin_attributes(obj):
     data = obj.data
     color = data.color_attributes.new("Skin tone", "FLOAT_COLOR", "POINT")
     crease = data.attributes.new("Crease relief", "FLOAT", "POINT")
-    lines = [[Vector(pair) for pair in line] for line in PALM_LINES]
+    lines = []
+    for path in PALM_LINES:
+        points = [Vector(pair) for pair in path]
+        lines.append([Vector(catmull(points,i,t/3)) for i in range(len(points)-1) for t in range(3)]+[points[-1]])
     for v in data.vertices:
         p = v.co
         palmar = smooth(.001,.011,p.z)
-        warmth = .017*math.sin(p.x*54+p.y*34)+.011*math.sin(p.y*117-p.z*93)
+        warmth = .014*math.sin(p.x*54+p.y*34)+.011*math.sin(p.y*117-p.z*93)
         fold, pad, knuckle = 0, 0, 0
         if -.023<p.y<.015:
             # The wrist folds wrap across the palmar side and fade toward the edges.
             across = p.x/.030
             wrist = palmar*(1-smooth(.53,.93,abs(across)))
-            for offset,width,depth in ((.0031,.00076,.63),(-.0037,.00082,.51),(-.0091,.00072,.28)):
+            for offset,width,depth in ((.0031,.00105,.59),(-.0037,.00102,.46),(-.0091,.00094,.26)):
                 curve = offset + .0030*across**2 + .0012*across
                 fold += wrist*gaussian(p.y-curve,width)*depth
         if -.025<p.y<.100:
@@ -603,7 +607,7 @@ def skin_attributes(obj):
             for i,line in enumerate(lines):
                 distance = min(closest_segment(flat,a,b)[1] for a,b in zip(line,line[1:]))
                 fade = smooth(0,.007,(flat-line[0]).length)*smooth(0,.007,(flat-line[-1]).length)
-                fold += palmar*gaussian(distance,.00063 if i<3 else .00057)*fade*(.98 if i<3 else .50)
+                fold += palmar*gaussian(distance,.00113 if i<3 else .00079)*fade*(.82 if i<3 else .26)
         if p.y>.064 or p.x>.033:
             near = min(FINGERS,key=lambda spec:track(p,spec)[1])
             at, off = track(p,near)
@@ -611,24 +615,28 @@ def skin_attributes(obj):
             supported = smooth(-.004,.004,at)*(1-smooth(.010,.016,off))
             if near.name=="Thumb":
                 supported *= smooth(.042,.057,p.x)
-            for joint,width in ((l0,.00072),(l0+l1,.00062)):
-                fold += palmar*supported*(gaussian(at-joint,width)*.93+
-                    gaussian(at-joint+.0018,width*.64)*.34)
-                fold += (1-palmar)*supported*gaussian(at-joint-.001,width*.78)*.24
+            for joint,width in ((l0,.00106),(l0+l1,.00092)):
+                fold += palmar*supported*(gaussian(at-joint,width)*.62+
+                    gaussian(at-joint+.0018,width*.63)*.21)
+                fold += (1-palmar)*supported*gaussian(at-joint-.001,width*.86)*.15
                 knuckle += (1-palmar)*supported*gaussian(at-joint,.0044)*.48
             pad = palmar*supported*smooth(l0+l1,l0+l1+l2*.93,at)
         crease.data[v.index].value = clamp(fold)
         amount = palmar*(.22 if p.y<-.001 else .92)
-        back = (.401,.224,.173)
-        palm = (.494,.251,.221)
-        shade = (.145,.099,.081)
+        back = (.347,.195,.143)
+        palm = (.457,.241,.183)
+        shade = (.099,.059,.047)
         channels = [mix(a,b,amount)+warmth-(.013*knuckle if i>0 else .004*knuckle)
                     for i,(a,b) in enumerate(zip(back,palm))]
+        dorsal_detail = (1-palmar)*gaussian(p.y-.034,.064)*(1-smooth(.071,.106,p.y))
+        vessel = dorsal_detail*gaussian(p.x+.011-.007*math.sin(p.y*72),.0022)
+        channels[0] -= .017*vessel
+        channels[2] += .009*vessel
         channels[0] += pad*.060
         channels[1] -= pad*.012
         color.data[v.index].color = (*(clamp(c-clamp(fold)*d) for c,d in zip(channels,shade)),1)
         if fold>.055 and v.normal.z>.25:
-            p.z -= .00026*clamp(fold)*v.normal.z
+            p.z -= .00016*clamp(fold)*v.normal.z
     data.color_attributes.active_color = color
     data.update()
 
@@ -644,13 +652,13 @@ def material(name, diffuse, rough):
 
 
 def skin_material():
-    mat, shader = material("Skin · warm dermis and palmar creases",(.445,.256,.188),.49)
+    mat, shader = material("Skin · warm dermis and palmar creases",(.397,.226,.167),.52)
     nodes,links = mat.node_tree.nodes, mat.node_tree.links
-    shader.inputs["Subsurface Weight"].default_value = .088
+    shader.inputs["Subsurface Weight"].default_value = .108
     shader.inputs["Subsurface Radius"].default_value = (1,.49,.27)
     shader.inputs["Subsurface Scale"].default_value = .006
     shader.inputs["IOR"].default_value = 1.43
-    shader.inputs["Specular IOR Level"].default_value = .30
+    shader.inputs["Specular IOR Level"].default_value = .27
     tone = nodes.new("ShaderNodeVertexColor")
     tone.layer_name = "Skin tone"
     tone.location = (-620,230)
@@ -695,8 +703,8 @@ def skin_material():
     crease.location = (-590,-420)
     carved = nodes.new("ShaderNodeBump")
     carved.invert = True
-    carved.inputs["Strength"].default_value = .46
-    carved.inputs["Distance"].default_value = .00062
+    carved.inputs["Strength"].default_value = .36
+    carved.inputs["Distance"].default_value = .00044
     carved.location = (-255,-160)
     links.new(crease.outputs["Fac"],carved.inputs["Height"])
     links.new(pore_bump.outputs["Normal"],carved.inputs["Normal"])
@@ -741,10 +749,10 @@ def nails(skin, rig, polish, collection):
                 if hit is None:
                     raise RuntimeError(f"Nail {spec.name} missed the dorsal skin")
                 edge = smooth(0,.18,min(t,1-t))*smooth(0,.22,1-abs(q))
-                vertices.append(hit+normal*mix(-.00008,.00049,edge))
-                pink = (.469,.262,.228)
-                white = (.64,.503,.412)
-                free = smooth(.82,.98,t)*mix(.83,1,1-abs(q))
+                vertices.append(hit+normal*mix(-.00008,.00037,edge))
+                pink = (.421,.248,.196)
+                white = (.583,.463,.363)
+                free = smooth(.88,.99,t)*mix(.83,1,1-abs(q))
                 moon = gaussian(t-.22,.12)*gaussian(q,.4)*.26
                 border = smooth(.68,1,abs(q))*(1-free)*.28
                 tint = [mix(c,light,free+moon*(1-free))-border*shadow
@@ -791,9 +799,50 @@ def mirrored(original, rig, collection):
     return left
 
 
-FIST_BENDS = ((69,90,52),(75,94,59),(77,95,61),(77,95,61))
-FIST_THUMB = ((46.5,-27.1,-22.5),(29.4,66.2))
-TUCKED_THUMB = ((33,-33,-12),(68,79))
+def drive_fold(key, rig, joint, start, span):
+    driver = key.driver_add("value").driver
+    driver.type = "SCRIPTED"
+    variable = driver.variables.new()
+    variable.name = "bend"
+    variable.type = "SINGLE_PROP"
+    variable.targets[0].id = rig
+    variable.targets[0].data_path = rig.pose.bones[joint].path_from_id("rotation_euler")+"[0]"
+    driver.expression = f"min(1,max(0,(bend-{start})/{span}))"
+
+
+def flex_creases(skin, rig, side):
+    skin.shape_key_add(name="Rest skin", from_mix=False)
+    for spec in FINGERS:
+        for j in (1, 2):
+            joint = spec.joints[j]
+            center = spec.points[j]
+            tangent = (spec.points[j+1]-spec.points[j-1]).normalized()
+            roll = THUMB_ROLL[j] if spec.name == "Thumb" else 0
+            inward = Quaternion(tangent, math.radians(roll)) @ UP
+            key = skin.shape_key_add(name=f"{joint} palmar compression", from_mix=False)
+            for vertex in skin.data.vertices:
+                offset = mirror(vertex.co, side)-center
+                along = offset.dot(tangent)
+                if abs(along) > .007 or offset.length > spec.radii[j]*1.26:
+                    continue
+                face = smooth(.0015, .0060, offset.dot(inward))
+                crease = .00039*gaussian(along+.0006,.0012)
+                shoulder = .00012*gaussian(along-.0021,.0014)
+                if face > 0:
+                    key.data[vertex.index].co += mirror(inward, side)*(face*(shoulder-crease))
+            drive_fold(key,rig,joint,.32,.92)
+
+    pad = skin.shape_key_add(name="Palmar pad compression under the little finger", from_mix=False)
+    for vertex in skin.data.vertices:
+        x,y,z = mirror(vertex.co,side)
+        amount = gaussian(x+.0245,.007)*gaussian(y-.085,.008)*smooth(.006,.010,z)
+        pad.data[vertex.index].co.z -= .00065*amount
+    drive_fold(pad,rig,"Little.MCP",.99,.26)
+
+
+FIST_BENDS = ((69,90,52),(75,94,59),(77,95,61),(75,96,66))
+FIST_THUMB = ((50.7,-28.1,-19.4),(25.9,52.3))
+TUCKED_THUMB = ((40,-21,-17),(53,63))
 FIST_METACARPAL_YAW = (4,1,-1.5,-6.25)
 FIST_METACARPAL_CUP = (7.5,6.54,6.51,10.59)
 FIST_KNUCKLE_YAW = (-8.5,-5,-3.25,1.25)
@@ -804,9 +853,9 @@ POSES = (
     (28,"Open",((1,2,1),(2,4,2),(4,6,4),(6,10,5)),(-7,-4,-12),(4,7),(2,0,-2),-2),
     (39,"Thumb knuckle bends",((2,4,1),(3,4,2),(5,8,5),(8,11,5)),(-5,-3,-11),(34,9),(3,1,-3),8),
     (49,"Thumb tip curls",((3,5,2),(5,7,3),(8,11,6),(12,15,8)),(-3,-2,-10),(35,46),(5,1,-4),16),
-    (54,"Thumb lifts",((7,12,7),(10,18,9),(16,23,12),(20,29,16)),(22,5,-4),(31,35),(6,1,-3),21),
-    (59,"Thumb turns in",((11,25,13),(17,34,20),(26,45,24),(36,54,31)),(34,11,15),(29,27),(7,2,-2),23),
-    (69,"Fingers close",((55,76,43),(66,84,49),(70,90,56),(73,90,57)),(47,-8,-8),(23,34),(10,3,1),19),
+    (54,"Thumb lifts",((5,9,5),(9,15,8),(16,23,12),(23,35,19)),(18,4,-6),(29,31),(6,1,-3),21),
+    (59,"Fingers begin to close",((10,21,11),(17,31,18),(27,46,26),(39,57,35)),(28,9,9),(27,27),(7,2,-2),23),
+    (69,"Thumb crosses the curled fingers",((53,75,42),(65,83,49),(70,90,56),(72,91,62)),(43,-6,-10),(24,34),(10,3,1),19),
     (80,"Closed fist",FIST_BENDS,*FIST_THUMB,(11,3,2),12),
     (86,"Squeeze",FIST_BENDS,*FIST_THUMB,(12,4,1),10),
     (95,"Thumb folds across palm",((3,4,2),(3,5,3),(5,5,4),(7,8,5)),*TUCKED_THUMB,(1,2,-2),7),
@@ -856,8 +905,8 @@ def animate(scene, rig, side, add_labels=False):
             if pose.name not in ("Thumb.CMC","Thumb.Web"):
                 pose.keyframe_insert(data_path="rotation_euler",frame=frame,group=pose.name)
     # Lift the thumb away from the index knuckle before both uncurl.
-    for name, angles in ((THUMB_CONTROL,(49,-24*side,-18*side)),
-                         ("Thumb.MCP",(27,0,0)),("Thumb.IP",(62,0,0))):
+    for name, angles in ((THUMB_CONTROL,(46,-17*side,-15*side)),
+                         ("Thumb.MCP",(25,0,0)),("Thumb.IP",(53,0,0))):
         pose = rig.pose.bones[name]
         pose.rotation_euler = tuple(map(math.radians,angles))
         pose.keyframe_insert(data_path="rotation_euler",frame=88,group=pose.name)
@@ -1119,8 +1168,11 @@ def main():
     skin_attributes(right_skin)
     skin_weights(right_skin,right)
     parts = [right_skin,*nails(right_skin,right,polish,right_collection)]
-    for obj in parts:
+    left_skin = mirrored(right_skin,left,left_collection)
+    for obj in parts[1:]:
         mirrored(obj,left,left_collection)
+    flex_creases(right_skin,right,1)
+    flex_creases(left_skin,left,-1)
     fabric = material("Indigo woven cuffs",(.034,.055,.073),.83)[0]
     sleeve(right,1,costume,fabric)
     sleeve(left,-1,costume,fabric)

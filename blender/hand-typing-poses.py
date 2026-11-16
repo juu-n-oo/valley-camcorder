@@ -17,9 +17,9 @@ ROW_OFFSET = (0, .00475, .0095, .01425, 0)
 EVENTS = (
     (143, "L", "Index", 2, 4), (147, "R", "Index", 2, 7),
     (152, "L", "Middle", 2, 3), (156, "R", "Middle", 2, 8),
-    (161, "L", "Index", 1, 4), (165, "R", "Index", 1, 7),
+    (161, "L", "Ring", 1, 2), (165, "R", "Ring", 1, 10),
     (170, "L", "Index", 3, 4), (174, "R", "Index", 3, 7),
-    (179, "L", "Index", 2, 5), (183, "R", "Index", 2, 6),
+    (179, "L", "Little", 2, 1), (183, "R", "Little", 2, 10),
     (188, "L", "Middle", 1, 3), (192, "R", "Middle", 1, 8),
     (198, "L", "Middle", 3, 3), (202, "R", "Index", 3, 6),
 )
@@ -159,11 +159,9 @@ def animate(scene, right, left, study):
     by_name = {finger.name: finger for finger in fingers}
     for side, label, rig in ((1, "R", right), (-1, "L", left)):
         scene.frame_set(FIRST - 1)
-        if label == "L":
-            rig.animation_data.action = None
         key_pose(rig, FIRST - 1)
         skin = bpy.data.objects["Continuous hand skin." + label]
-        pads = {name: finger_pad(rig, skin, by_name[name]) for name in ("Index", "Middle")}
+        pads = {name: finger_pad(rig, skin, finger) for name,finger in by_name.items()}
         scene.frame_set(FIRST)
         hover(rig, fingers, side, 2, 0, 0)
         key_pose(rig, FIRST)
@@ -171,7 +169,7 @@ def animate(scene, right, left, study):
             if hand != label:
                 continue
             x, y = key_center(row, column)
-            reference = (.041 if side > 0 else -.081) - side * (.036 if name == "Index" else .010)
+            reference = (.041 if side > 0 else -.081)-side*by_name[name].points[0].x
             shift = max(-.007, min(.007, (x - reference) * .26))
             indices, pad = pads[name]
             for offset, height, effort in ((-3, .033, 0), (-1, .0254, .44),
@@ -191,8 +189,7 @@ def animate(scene, right, left, study):
             hover(rig, fingers, side, 2, 0, 0)
             key_pose(rig, frame)
         animation = rig.animation_data
-        if label == "L":
-            animation.action.name = "Keyboard typing.L"
+        animation.action.name = "Gesture studies."+label
         for curve in animation.action.layers[0].strips[0].channelbag(animation.action_slot).fcurves:
             for key in curve.keyframe_points:
                 if key.co.x == FIRST - 1:

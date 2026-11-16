@@ -14,8 +14,8 @@ OPEN = ((2, 4, 2), (3, 5, 3), (5, 6, 4), (6, 9, 5))
 THUMB_OPEN = (-7, -4, -12)
 COUNTS = (
     (40, 53, 5, (2, 1, -2), -3),
-    (61, 75, 4, (1, -1, -1), 3),
-    (83, 96, 3, (0, -1, 1), 4),
+    (61, 75, 4, (1, -3, -1), 11),
+    (83, 96, 3, (0, -2, 1), 6),
     (104, 117, 2, (-2, 0, 2), 2),
     (125, 144, 1, (-3, 2, 3), -2),
 )
@@ -24,25 +24,22 @@ COUNTS = (
 def hand_keys(study):
     fist = study["FIST_BENDS"]
     yield 1, "Relax", ((8, 17, 8), (11, 23, 11), (14, 27, 15), (19, 31, 18)), (27, 5, 5), (13, 10), (-4, 0, 3), -6
-    yield 9, None, ((32, 49, 32), (37, 54, 37), (43, 62, 44), (52, 65, 45)), (35, 0, 8), (24, 32), (3, 1, 2), 3
+    yield 9, None, ((26, 39, 22), (35, 49, 30), (44, 62, 41), (54, 69, 48)), (26, 2, 7), (22, 26), (3, 1, 2), 3
     yield 19, "Clench", fist, *study["FIST_THUMB"], (10, 2, 0), 8
     yield 27, "Squeeze", fist, *study["FIST_THUMB"], (12, 2, -1), 11
-    yield 33, "Open", ((40, 63, 35), (48, 65, 37), (53, 72, 43), (58, 75, 45)), (30, -17, -9), (30, 47), (7, 1, -2), 5
+    yield 29, None, fist, (43,-15,-14), (25,49), (10,1,-1), 9
+    yield 33, "Open", ((37, 57, 31), (45, 65, 37), (53, 71, 43), (58, 75, 47)), (28, -13, -10), (24, 36), (7, 1, -2), 5
     for first, last, number, wrist, roll in COUNTS:
-        extended = min(number, 4)
-        fingers = OPEN[:extended] + fist[extended:]
-        if number == 3:
-            # The little finger closes against the palm before its neighbours.
-            fingers = (*fingers[:3], (61, 109, 59))
+        closed = 4-min(number, 4)
+        # The reference closes the thumb, then counts down from the index towards the little finger.
+        fingers = fist[:closed] + OPEN[closed:]
         if number == 5:
             thumb, hinges = THUMB_OPEN, (4, 7)
         else:
-            thumb, hinges = study["FIST_THUMB" if number == 1 else "TUCKED_THUMB"]
+            thumb, hinges = study["TUCKED_THUMB"]
         yield first, str(number), fingers, thumb, hinges, wrist, roll
-        eased = tuple((a-.8, b-1, c) if i < extended else (a+1, b+1.6, c+1)
+        eased = tuple((a-.8, b-1, c) if i >= closed else (a+.45, b+.75, c+.7)
                        for i, (a, b, c) in enumerate(fingers))
-        if number == 3:
-            eased = (*eased[:3], fingers[3])
         yield last, None, eased, thumb, hinges, (wrist[0]-.8, wrist[1], wrist[2]+.7), roll+.9
 
 
@@ -95,10 +92,10 @@ def verify_counts(scene, rig, fingers):
     for first, last, expected, *_ in COUNTS:
         for frame in range(first, last+1):
             scene.frame_set(frame)
-            fingers_up = sum(rig.pose.bones[finger.joints[0]].rotation_euler.x < math.radians(20)
-                             for finger in fingers)
+            open_fingers = [finger.name for finger in fingers
+                            if rig.pose.bones[finger.joints[0]].rotation_euler.x < math.radians(20)]
             thumb_up = rig.pose.bones["Thumb.Base"].rotation_euler.x < math.radians(10)
-            if fingers_up + thumb_up != expected:
+            if len(open_fingers)+thumb_up != expected or open_fingers != [f.name for f in fingers[4-min(expected,4):]]:
                 raise RuntimeError(f"Frame {frame}: expected {expected} extended fingers")
 
 

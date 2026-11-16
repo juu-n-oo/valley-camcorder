@@ -51,6 +51,9 @@ def _finish(slot,paint=None,optic=None,override=None):
     elif override=="Sooted exhaust":
         principled.inputs["Roughness"].default_value=.94
         principled.inputs["Specular IOR Level"].default_value=.035
+    elif override=="Rear demister print":
+        principled.inputs["Roughness"].default_value=.46
+        principled.inputs["Metallic"].default_value=.18
     if slot in ("carPaint","carWood","carLens","carGlass"):
         principled.inputs["Coat Weight"].default_value=.92 if slot=="carPaint" else .35
         principled.inputs["Coat Roughness"].default_value=.067 if slot=="carPaint" else .13
@@ -63,7 +66,7 @@ def _finish(slot,paint=None,optic=None,override=None):
         tint.inputs[2].default_value=mat.diffuse_color
         links.new(attribute.outputs["Color"],tint.inputs[1])
         links.new(tint.outputs[0],principled.inputs["Base Color"])
-    if slot=="carGlass":
+    if slot=="carGlass" and override!="Rear demister print":
         transparent=nodes.new("ShaderNodeBsdfTransparent")
         transparent.inputs["Color"].default_value=(.48,.58,.60,1)
         # A single sheet represents both sides of the glass. Reflect grazing

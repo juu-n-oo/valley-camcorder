@@ -30,8 +30,8 @@ def build_hands():
     pads = (
         ("Thenar eminence", [
             ((-.143,-.061,.086),.015,.012), ((-.126,-.039,.063),.020,.012),
-            ((-.114,-.017,.040),.020,.014), ((-.101,.004,.027),.020,.013),
-            ((-.090,.016,.026),.016,.012), ((-.083,.022,.022),.008,.006),
+            ((-.114,-.017,.041),.019,.014), ((-.101,.004,.029),.018,.012),
+            ((-.090,.016,.027),.014,.010), ((-.083,.022,.023),.007,.0055),
         ]),
         ("Hypothenar eminence", [
             ((-.134,-.049,.093),.016,.011), ((-.118,-.017,.073),.016,.012),
@@ -85,10 +85,10 @@ def build_hands():
     body.data.remesh_voxel_size = .00125
     bpy.ops.object.voxel_remesh()
     relax = body.modifiers.new("Smooth digit webs", "SMOOTH")
-    relax.factor, relax.iterations = .61,4
+    relax.factor, relax.iterations = .61,7
     apply(body, relax)
     reduce = body.modifiers.new("First-person triangle budget", "DECIMATE")
-    reduce.ratio = .125
+    reduce.ratio = .154
     apply(body, reduce)
     for face in body.data.polygons:
         face.use_smooth = True
@@ -105,10 +105,10 @@ def build_hands():
             distance += length
         segments.append((chain, radius))
 
-    def nearest_digit(p):
+    def digit_tracks(p):
         pos = Vector(p)
-        best = (float("inf"),0,0)
         for i,(chain,radius) in enumerate(segments):
+            best = (float("inf"),i,0)
             for start,axis,length,accumulated in chain:
                 delta = pos-start
                 distance = delta.dot(axis)
@@ -116,33 +116,49 @@ def build_hands():
                 offset = (delta-axis*bounded).length_squared/(radius*radius)
                 if offset < best[0]:
                     best = (offset,i,accumulated + (distance if accumulated == 0 and distance < 0 else bounded))
-        return best
+            yield best
 
     def weights(p):
-        _, i, at = nearest_digit(p)
-        chain, radius = segments[i]
-        base = 1+3*i
-        rise = smooth_step(-radius*.36, radius*1.23, at)
-        overlap = radius*.76
-        to_middle = smooth_step(chain[1][3]-overlap, chain[1][3]+overlap, at)
-        to_tip = smooth_step(chain[2][3]-overlap, chain[2][3]+overlap, at)
-        return ((0,1-rise),(base,rise*(1-to_middle)),(base+1,rise*(to_middle-to_tip)),(base+2,rise*to_tip))
+        closest, neighbour, *_ = sorted(digit_tracks(p))
+        other_weight=1-smooth_step(.07,.64,neighbour[0]-closest[0])
+        groups=[]
+        for (score,i,at),proximity in ((closest,1),(neighbour,other_weight)):
+            chain,radius=segments[i]
+            if i!=closest[1] and closest[2]>segments[closest[1]][1]*1.4:
+                continue
+            rise=smooth_step(-radius*.45,radius*1.25,at)*proximity
+            rise*=1-smooth_step(1.65,3.25,score)
+            overlap=radius*.78
+            middle=smooth_step(chain[1][3]-overlap,chain[1][3]+overlap,at)
+            tip=smooth_step(chain[2][3]-overlap,chain[2][3]+overlap,at)
+            groups.append((1+3*i,rise,(1-middle,middle-tip,tip)))
+        strength=max(row[1] for row in groups)
+        if strength<.00001:
+            return ((0,1),)
+        total=sum(row[1] for row in groups)
+        values=[(0,1-strength)]
+        for start,rise,blend in groups:
+            values.extend((start+j,value*rise*strength/total) for j,value in enumerate(blend))
+        strongest=[entry for entry in sorted(values,key=lambda value:value[1],reverse=True)[:4]
+                   if entry[1]>.00001]
+        scale=sum(value for _,value in strongest)
+        return tuple((joint,value/scale) for joint,value in strongest)
 
     def skin_variation(p):
         x,y,z = p
         noise = sin(x*818+y*476)*sin(z*683-y*253) + sin(x*346-z*523)*.43
         hues = sin(x*53-z*34)*.019 + sin(y*101+z*71)*.014
         warm = smooth_step(.011,.068,y)*.027
-        return (SKIN[0]+warm+hues+.0045*noise,
-                SKIN[1]+hues*.58+.004*noise,
-                SKIN[2]-warm*.63+hues*.17+.004*noise)
+        return (SKIN[0]*.96+warm+hues+.0045*noise,
+                SKIN[1]*.945+hues*.58+.004*noise,
+                SKIN[2]*.935-warm*.63+hues*.17+.004*noise)
 
     def skin_tone(p):
         x,y,_ = p
-        _, i, at = nearest_digit(p)
+        _, i, at = min(digit_tracks(p))
         chain, radius = segments[i]
-        folds = sum(exp(-((at-s[3])/(radius*.16))**2) for s in chain[1:])
-        crease = folds*.027*smooth_step(.012,.050,y)*smooth_step(-.12,.015,x)
+        folds = sum(exp(-((at-s[3])/(radius*.20))**2) for s in chain[1:])
+        crease = folds*.021*smooth_step(.012,.050,y)*smooth_step(-.12,.015,x)
         return tuple(c-crease*scale for c,scale in zip(skin_variation(p),(1,1,.66)))
 
     skin_material = material("skin",SKIN).copy()

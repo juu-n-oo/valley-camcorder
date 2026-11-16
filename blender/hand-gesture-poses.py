@@ -24,7 +24,7 @@ def gesture_keys(study):
     original = {frame: pose for frame, _, *pose in countdown["hand_keys"](study)}
     # Re-time the same vetted grasp. Play the number poses in ascending order.
     for frame, source in (
-        (1, 1), (8, 9), (16, 19), (22, 27), (30, 33), (37, 40), (42, 53),
+        (1, 1), (8, 9), (16, 19), (22, 27), (25, 29), (30, 33), (37, 40), (42, 53),
         (43, 144), (52, 125), (59, 117), (65, 104), (72, 96), (78, 83),
         (85, 75), (91, 61), (99, 53), (112, 40),
     ):
@@ -38,8 +38,8 @@ def gesture_keys(study):
     yield 138, ((2, 4, 2), (72, 89, 52), (77, 95, 59), (77, 95, 60)), thumb, hinges, (-.5, -14, -15), -14
 
 
-def animate(rig, study):
-    """Author frames 1–138 on the right-hand rig and keep its thumb drivers."""
+def animate(rig, study, side=1):
+    """Author frames 1–138 on a hand rig and keep its thumb drivers."""
     animation = rig.animation_data
     if animation.action is not None:
         animation.action.use_fake_user = True
@@ -48,17 +48,17 @@ def animate(rig, study):
     bones = rig.pose.bones
     keyed_bones = [bone for bone in bones if bone.name not in ("Thumb.CMC", "Thumb.Web")]
     for frame, bends, thumb, hinges, wrist, roll in gesture_keys(study):
-        bones["Forearm"].rotation_euler = (0, math.radians(roll), 0)
-        bones["Wrist"].rotation_euler = tuple(map(math.radians, wrist))
-        study["pose_fingers"](rig, bends, spread=4.7)
-        bones["Thumb.Base"].rotation_euler = tuple(map(math.radians, thumb))
+        bones["Forearm"].rotation_euler = (0, math.radians(roll*side), 0)
+        bones["Wrist"].rotation_euler = tuple(map(math.radians,(wrist[0],wrist[1]*side,wrist[2]*side)))
+        study["pose_fingers"](rig, bends, side, spread=4.7)
+        bones["Thumb.Base"].rotation_euler = tuple(map(math.radians,(thumb[0],thumb[1]*side,thumb[2]*side)))
         for name, degrees in zip(("Thumb.MCP", "Thumb.IP"), hinges):
             bones[name].rotation_euler = (math.radians(degrees), 0, 0)
         for bone in keyed_bones:
             bone.keyframe_insert(data_path="rotation_euler", frame=frame, group=bone.name)
 
     action = animation.action
-    action.name = "Fist, count up and point.R"
+    action.name = "Fist, count up and point."+("R" if side>0 else "L")
     for curve in action.layers[0].strips[0].channelbag(animation.action_slot).fcurves:
         for key in curve.keyframe_points:
             key.handle_left_type = key.handle_right_type = "AUTO_CLAMPED"

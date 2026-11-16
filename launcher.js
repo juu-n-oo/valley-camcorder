@@ -383,8 +383,9 @@
     const open = 1-grip;
     for (const [i,{mesh,root,pivots}] of hand.fingers.entries()) {
       const engaged=i===0 ? 1-extension : 1;
-      const spread=open*engaged, flex=curl*(.85+i*.068)*engaged;
-      const bend=.23*grip*engaged+.48*flex+(i ? .22*pinch : 0);
+      const close=palette ? smooth(.025+(3-i)*.038,.94,grip) : grip;
+      const spread=(1-close)*engaged, flex=curl*(.85+i*.068)*engaged;
+      const bend=.23*close*engaged+.48*flex+(i ? .22*pinch : 0);
       const pose=transform(root,0,spread*(i-1.5)*.077*splay,spread*.66-flex-(i===0 ? 0 : pinch*.64));
       const bends=pivots ? fingerPalette(pivots,bend) : undefined;
       if(palette) moveDigit(palette,1+i*3,root,pose,bends);
@@ -398,7 +399,7 @@
       .13*pry-.22*flick+.34*curl,-open*.26+.72*pry+.13*flick+(palette ? -.37 : .37)*curl,-open*.48+.31*pry+.21*flick+.52*pinch
     );
     if(palette) {
-      const thumbBend=.16*grip+.44*pinch+.21*curl;
+      const thumbBend=.16*smooth(.29,.96,grip)+.44*pinch+.21*curl;
       moveDigit(palette,13,thumbRoot,thumbPose,fingerPalette(thumbJoints,thumbBend));
       for(const mesh of hand.skin) opaque.push({mesh,matrix,handSide:side,palette});
     } else opaque.push(thumb ? {...thumb,handSide:side} : {mesh:hand.thumb,handSide:side,matrix:multiply(matrix,thumbPose)});

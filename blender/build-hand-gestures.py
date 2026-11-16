@@ -1,6 +1,7 @@
 """Stage four gesture studies using the existing first-person hands."""
 
 import argparse
+import math
 from collections import defaultdict
 from pathlib import Path
 import runpy
@@ -162,10 +163,14 @@ def main():
     scene.timeline_markers.clear()
     right, left = (bpy.data.objects[f"Hand rig.{side}"] for side in ("R","L"))
     gestures["animate"](right, study)
+    left.rotation_euler = (0,0,math.radians(11))
+    gestures["animate"](left, study, -1)
     strokes = typing["animate"](scene, right, left, study)
     for part in left.children_recursive:
-        part.hide_render = True
+        part.hide_render = False
         part.keyframe_insert(data_path="hide_render", frame=1)
+        part.hide_render = True
+        part.keyframe_insert(data_path="hide_render", frame=113)
         part.hide_render = False
         part.keyframe_insert(data_path="hide_render", frame=TYPING_START)
     keyboard(scene, study, strokes)
@@ -175,9 +180,9 @@ def main():
         if obj.type == "CAMERA":
             bpy.data.objects.remove(obj, do_unlink=True)
     first = shot(scene, cameras, study, "Fist and release", 1,
-                 (.171,-.085,.60), (.105,.055,.060), .335)
+                 (.012,-.088,.68), (-.011,.030,.053), .525)
     shot(scene, cameras, study, "Count 1 to 5", 43,
-         (.146,-.109,.61), (.103,.060,.059), .342)
+         (.009,-.085,.69), (-.009,.048,.054), .519)
     shot(scene, cameras, study, "Index pointing", 113,
          (.222,-.105,.54), (.105,target.y*.5-.008,.059), .358)
     shot(scene, cameras, study, "Typing", TYPING_START,
