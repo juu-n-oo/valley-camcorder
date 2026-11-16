@@ -16,7 +16,7 @@
   }
 
   function plate(b,front,signs) {
-    const side=front ? 1 : -1,w=.342,h=.171,z=front ? 2.373 : -2.391,y=front ? .432 : .467;
+    const side=front ? 1 : -1,w=.342,h=.171,z=front ? 2.233 : -2.385,y=front ? .477 : .438;
     const uv=signs.uv("대전00","가 0000",w,h,"plate");
     b.quad([[-side*w/2,y-h/2,z],[side*w/2,y-h/2,z],[side*w/2,y+h/2,z],[-side*w/2,y+h/2,z]],rgb(0xf2f0df),null,uv);
   }
@@ -148,10 +148,11 @@
   }
 
   function doorParts(car,asset,side,front) {
-    const lo=front ? -.211 : -1.229, hi=front ? 1.011 : -.245, z=hi-.023;
-    const pivot=[side*.858,.325,z], m=car.scene.material, {paint,color}=car;
+    const lo=front ? -.270 : -1.272, hi=front ? 1.011 : -.295;
+    const m=car.scene.material, {paint,color}=car;
     const key=endName(front)+"_"+sideName(side);
     const {anchors}=Valley.blenderAssets.get("sedan_door_"+key);
+    const pivot=anchors.hinge;
     const local=p=>minus(p,pivot);
     const door=part(car,"carDoor",asset(color+" door "+key,model(m,"door_"+key,paint),{ray:[m.carPaint],dent:true}),
       {pivot,...opening(-side*1.25),center:local([side*.882,.605,(lo+hi)*.5])});
@@ -162,9 +163,9 @@
     box(car,pane,local([side*.787,1.117,(lo+hi)*.5]),[.150,.390,(hi-lo)*.79]);
     if(front) {
       part(car,"carTrim",asset(color+" mirror "+side,model(m,"mirror_housing_"+key,paint),
-        {ray:[m.carPaint]}),{parent:door,center:local([side*1.01,.979,.79])});
+        {ray:[m.carPaint]}),{parent:door,center:local([side*1.021,.987,.76])});
       part(car,"glass",asset("side mirror "+side,model(m,"mirror_glass_"+key),{ray:[m.carMetal]}),
-        {parent:door,door,opaqueGlass:true,hp:.25,center:local([side*1.017,.982,.727])});
+        {parent:door,door,opaqueGlass:true,hp:.25,center:local([side*1.021,.987,.70])});
     }
     const lock=part(car,"carLock",asset("door lock",model(m,"door_lock")),{parent:door,pivot:anchors.lock,pane,door});
     handle(lock,[0,.013,0],[.148,.115,.167],{top:true,pointing:true,action:"unlock"});
@@ -174,13 +175,13 @@
   }
 
   function openableLid(car,asset,front) {
-    const m=car.scene.material, name=front ? "hood" : "trunk", pivot=front ? [0,.968,1.053] : [0,.944,-1.360];
-    const item=part(car,"carLid",asset(car.color+" "+name,model(m,front ? "hood" : "trunk_lid",car.paint),
+    const m=car.scene.material, name=front ? "hood" : "trunk", key=front ? "hood" : "trunk_lid";
+    const {hinge:pivot,latch}=Valley.blenderAssets.get("sedan_"+key).anchors;
+    const item=part(car,"carLid",asset(car.color+" "+name,model(m,key,car.paint),
       {ray:[m.carPaint],dent:true}),
-      {pivot,center:[0,-.06,front ? .586 : -.453],...opening(0),pitch:front ? -1.02 : 1.07,label:name,latch:0});
-    const grip=minus([0,front ? .766 : .808,front ? 2.219 : -2.218],pivot);
-    handle(item,grip,[1.27,.152,.40],{top:true,action:"lid"});
-    item.solid=box(car,item,[0,-.142,front ? .633 : -.434],[1.416,.238,front ? 1.18 : .865],{kind:"rock"});
+      {pivot,center:[0,-.08,front ? .585 : -.237],...opening(0),pitch:front ? -1.02 : 1.07,label:name,latch:0});
+    handle(item,latch,[1.27,.152,.37],{top:true,action:"lid"});
+    item.solid=box(car,item,[0,-.142,front ? .60 : -.24],[1.416,.238,front ? 1.13 : .48],{kind:"rock"});
   }
 
   function installedProp(car,asset,kind,parent,at) {
@@ -217,17 +218,18 @@
         box(car,body,[0,.413,side*1.804],[1.66,.55,1.028],{kind:"rock",follow:false});
         openableLid(car,asset,front);
         part(car,"glass",asset(front ? "windshield" : "rear window",model(m,front ? "windshield" : "back_glass"),{ray:[m.carGlass]}),
-          {hp:front ? .81 : .54,transparent:true,center:[0,1.196,front ? .754 : -1.026]});
+          {hp:front ? .81 : .54,transparent:true,center:[0,1.167,front ? .626 : -1.295]});
         for(const s of [-1,1]) {
           const key=endName(front)+"_"+sideName(s);
-          part(car,"carTrim",asset("lamp socket "+key,model(m,"lamp_socket_"+key)),{center:[s*.60,.662,side*2.29]});
+          const lamp=front ? [s*.654,.659,2.040] : [s*.735,.777,-2.315];
+          part(car,"carTrim",asset("lamp socket "+key,model(m,"lamp_socket_"+key)),{center:lamp});
           part(car,"glass",asset("lamp "+key,model(m,"lamp_"+key),{ray:[m.carLens]}),
-            {hp:.37,opaqueGlass:true,center:[s*.60,.662,side*2.29]});
+            {hp:.37,opaqueGlass:true,center:lamp});
         }
       }
       const top=part(car,"carBody",asset(color+" roof",model(m,"roof",car.paint),{ray:[m.carPaint],dent:true}));
-      box(car,top,[0,1.423,-.128],[1.255,.103,1.21],{kind:"rock",follow:false});
-      part(car,"carTrim",asset("wipers",model(m,"wipers")),{center:[0,.97,.98]});
+      box(car,top,[0,1.395,-.390],[1.265,.090,1.30],{kind:"rock",follow:false});
+      part(car,"carTrim",asset("wipers",model(m,"wipers")),{center:[0,.97,.887]});
       for(const side of [-1,1]) {
         doorParts(car,asset,side,true);
         doorParts(car,asset,side,false);
@@ -245,9 +247,9 @@
       box(car,cabin,[0,.407,-.878],[1.38,.270,.485],{kind:"rock",follow:false});
       const dash=part(car,"carCabin",asset("dash",model(m,"dashboard")));
       box(car,dash,[0,.793,.889],[1.49,.325,.29],{follow:false});
-      part(car,"carTrim",asset("rearview shell",model(m,"rearview_housing")),{center:[0,1.25,.54]});
+      part(car,"carTrim",asset("rearview shell",model(m,"rearview_housing")),{center:[0,1.201,.405]});
       part(car,"glass",asset("rearview glass",model(m,"rearview_glass"),{ray:[m.carMetal]}),
-        {hp:.23,opaqueGlass:true,center:[0,1.25,.51]});
+        {hp:.23,opaqueGlass:true,center:[0,1.201,.374]});
       part(car,"carTrim",asset("engine and trunk",model(m,"engine_and_boot"),{ray:[m.carMetal]}));
       const glove=part(car,"carStorage",asset("glove box",model(m,"glove_box"),{ray:[m.carLeather]}),
         {pivot:[-.474,.589,.841],...opening(0),pitch:-1.05,label:"glove box"});

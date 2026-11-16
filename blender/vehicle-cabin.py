@@ -92,21 +92,21 @@ def _door_card(name,side,front,lo,hi):
 def _headliner_details(roof):
     for side in (-1,1):
         x=side*.319
-        _pill(roof,"fabric","Molded sun visor",(x,1.373,.359),.505,.186,.034,CABIN_BEIGE,"y",.46)
-        _pill(roof,"carLeather","Vanity cover",(x,1.354,.322),.167,.071,.009,CABIN_BEIGE,"y",.41)
-        _cord(roof,"carMetal","Sun visor hinge rod",[(x+side*.206,1.381,.435),
-              (x+side*.234,1.378,.429),(x+side*.241,1.373,.409)],.0074,SEDAN_ALLOY)
+        _pill(roof,"fabric","Molded sun visor",(x,1.330,.205),.505,.186,.034,CABIN_BEIGE,"y",.46)
+        _pill(roof,"carLeather","Vanity cover",(x,1.311,.168),.167,.071,.009,CABIN_BEIGE,"y",.41)
+        _cord(roof,"carMetal","Sun visor hinge rod",[(x+side*.206,1.338,.281),
+              (x+side*.234,1.335,.275),(x+side*.241,1.330,.255)],.0074,SEDAN_ALLOY)
         handle=[(side*.615,1.358,-.215),(side*.596,1.335,-.190),(side*.593,1.329,-.030),
                 (side*.616,1.349,-.001)]
         _cord(roof,"carLeather","Roof grab handle",catmull(handle,5),.013,CABIN_BEIGE,sides=12)
-    _pill(roof,"carLeather","Overhead map light console",(0,1.373,.295),.280,.245,.055,CABIN_BEIGE,"y",.49)
-    _pill(roof,"plain","Sunglasses lid perimeter",(0,1.343,.354),.192,.096,.011,SEDAN_TRIM,"y",.46)
-    _pill(roof,"carLeather","Sunglasses compartment lid",(0,1.335,.354),.184,.088,.011,CABIN_BEIGE,"y",.46)
-    _letter(roof,"gloss","PUSH",(0,1.329,.372),.014,rgb(0x878176),
+    _pill(roof,"carLeather","Overhead map light console",(0,1.330,.141),.280,.245,.055,CABIN_BEIGE,"y",.49)
+    _pill(roof,"plain","Sunglasses lid perimeter",(0,1.300,.200),.192,.096,.011,SEDAN_TRIM,"y",.46)
+    _pill(roof,"carLeather","Sunglasses compartment lid",(0,1.292,.200),.184,.088,.011,CABIN_BEIGE,"y",.46)
+    _letter(roof,"gloss","PUSH",(0,1.286,.218),.014,rgb(0x878176),
             right=(-1,0,0),up=(0,0,-1),rise=.00018)
     for x in (-.061,.061):
-        _pill(roof,"carLens","Map lamp lens",(x,1.343,.227),.081,.065,.020,rgb(0xb6bab0),"y",.62)
-        _pill(roof,"carLeather","Map lamp button",(x,1.335,.269),.044,.021,.018,CABIN_BEIGE,"y",.6)
+        _pill(roof,"carLens","Map lamp lens",(x,1.300,.073),.081,.065,.020,rgb(0xb6bab0),"y",.62)
+        _pill(roof,"carLeather","Map lamp button",(x,1.292,.115),.044,.021,.018,CABIN_BEIGE,"y",.6)
 
 
 def _upholstery():
@@ -204,7 +204,11 @@ def _upholstery():
     seat_foam("Folded-down center armrest",(0,.540,-.819),(.289,.103,.426),.036,color=fabric)
     _cord(name,"carLeather","Rear armrest stitched bound edge",
           [(x,.576,z) for x,z in rounded_armrest()],.0018,rgb(0xa99b82),closed=True)
-    box(name,"fabric","Rear parcel shelf",(0,.971,-1.266),(1.448,.053,.239),rgb(0x777468),.017)
+    _pill(name,"fabric","Shaped rear parcel shelf",(0,.947,-1.453),1.527,.450,.038,
+          rgb(0x41403a),"y",.46)
+    for side in (-1,1):
+        _pill(name,"plain","Perforated rear shelf speaker",(side*.51,.966,-1.462),.221,.134,.010,
+              rgb(0x333431),"y",.66)
 
 
 def rounded_armrest():
@@ -465,8 +469,8 @@ def _tunnel(name):
 
 def _dashboard():
     name=_sedan_asset("dashboard")
-    cross_section=[(.747,.687),(.818,.654),(.882,.661),(.930,.695),(.956,.771),
-                   (.956,.934),(.936,1.011),(.848,1.049),(.747,1.023),(.708,.831)]
+    cross_section=[(.747,.687),(.818,.654),(.882,.661),(.930,.695),(.951,.766),
+                   (.927,.871),(.897,.931),(.848,.980),(.747,1.010),(.708,.831)]
     rows=[]
     for t in _range(25):
         x=(2*t-1)*.817
@@ -478,7 +482,7 @@ def _dashboard():
     for side in (-1,1):
         for i in range(12):
             x=side*(.249+i*.033)
-            box(name,"plain","Windscreen demister slot",(x,.947,.961),(.018,.004,.043),rgb(0x44463d),.001)
+            box(name,"plain","Windscreen demister slot",(x,.929,.866),(.018,.004,.043),rgb(0x44463d),.001)
     _cluster(name)
     _steering(name)
     _center_stack(name)

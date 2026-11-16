@@ -67,20 +67,35 @@ test('Sonata lenses keep their front amber corner and separate red rear sections
   for (const side of ['left','right']) {
     const front = assets.get('sedan_lamp_front_' + side).parts.find(part => part.slot === 'carLens').shape.vertices;
     const rear = assets.get('sedan_lamp_rear_' + side).parts.find(part => part.slot === 'carLens').shape.vertices;
-    let clear = 0, amber = 0, upper = 0, red = 0;
+    let clear = 0, amber = 0, red = 0, misplaced = 0, reverse = 0, indicator = 0;
     for (let i = 0; i < front.length; i += 11) {
       const [r,g,b] = front.subarray(i+8,i+11);
       if (r > .49 && b > .56) clear++;
       if (r > .55 && g > .44 && b < .27) amber++;
     }
+    let bottom=Infinity, top=-Infinity;
+    for (let i = 1; i < rear.length; i += 11) {
+      bottom=Math.min(bottom,rear[i]);
+      top=Math.max(top,rear[i]);
+    }
     for (let i = 0; i < rear.length; i += 11) {
-      const x = Math.abs(rear[i]);
-      if (x < .637 || x > .817 || rear[i+1] < .66 || rear[i+1] > .78) continue;
-      upper++;
+      const height=(rear[i+1]-bottom)/(top-bottom);
       const [r,g,b] = rear.subarray(i+8,i+11);
-      if (r > .53 && g < .28 && b < .28) red++;
+      const isRed = r > .53 && g < .28 && b < .28;
+      const isClear = r > .48 && b > .50;
+      const isAmber = r > .55 && g > .42 && b < .27;
+      if (height > .52) {
+        if (isRed) red++;
+        if (isClear || isAmber) misplaced++;
+      }
+      if (height < .23) {
+        if (isClear) reverse++;
+        if (isAmber) indicator++;
+        if (isRed) misplaced++;
+      }
     }
     assert.ok(clear > 100 && amber > 50, side);
-    assert.ok(upper > 100 && red/upper > .87, side);
+    assert.ok(red > 100 && misplaced === 0, side);
+    assert.ok(reverse > 30 && indicator > 50, side);
   }
 });

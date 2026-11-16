@@ -20,15 +20,17 @@ def _finish(slot,paint=None):
     attribute.layer_name=SEDAN_TINT
     links.new(attribute.outputs["Color"],principled.inputs["Base Color"])
     rough,metallic={
-        "carPaint":(.19,.31),"carGlass":(.09,0),"carLens":(.17,.12),"carMetal":(.29,.81),
-        "carWood":(.23,0),"carLeather":(.47,0),"carTire":(.73,0),"fabric":(.91,0),
+        "carPaint":(.20,.18),"carGlass":(.070,0),"carLens":(.23,.07),"carMetal":(.245,.81),
+        "carWood":(.23,0),"carLeather":(.47,0),"carTire":(.79,0),"fabric":(.91,0),
         "gloss":(.38,.08),"plain":(.64,0)
     }.get(slot,(.53,0))
     principled.inputs["Roughness"].default_value=rough
     principled.inputs["Metallic"].default_value=metallic
+    if slot=="carLens":
+        principled.inputs["Specular IOR Level"].default_value=.28
     if slot in ("carPaint","carWood","carLens","carGlass"):
-        principled.inputs["Coat Weight"].default_value=.73 if slot=="carPaint" else .42
-        principled.inputs["Coat Roughness"].default_value=.13 if slot=="carPaint" else .18
+        principled.inputs["Coat Weight"].default_value=.92 if slot=="carPaint" else .35
+        principled.inputs["Coat Roughness"].default_value=.078 if slot=="carPaint" else .15
     if slot=="carPaint":
         variant=SEDAN_PAINTS[paint or "Obsidian black"]
         mat.diffuse_color=(*map(_linear,variant),1)
@@ -40,14 +42,21 @@ def _finish(slot,paint=None):
         links.new(tint.outputs[0],principled.inputs["Base Color"])
     if slot=="carGlass":
         transparent=nodes.new("ShaderNodeBsdfTransparent")
-        transparent.inputs["Color"].default_value=(.83,.94,.94,1)
+        transparent.inputs["Color"].default_value=(.30,.42,.42,1)
+        fresnel=nodes.new("ShaderNodeFresnel")
+        fresnel.inputs["IOR"].default_value=1.52
+        reflection=nodes.new("ShaderNodeMath")
+        reflection.operation="MULTIPLY_ADD"
+        reflection.inputs[1].default_value=.71
+        reflection.inputs[2].default_value=.28
+        links.new(fresnel.outputs[0],reflection.inputs[0])
         mix=nodes.new("ShaderNodeMixShader")
-        mix.inputs[0].default_value=.26
+        links.new(reflection.outputs[0],mix.inputs[0])
         links.new(transparent.outputs[0],mix.inputs[1])
         links.new(principled.outputs[0],mix.inputs[2])
         links.new(mix.outputs[0],output.inputs["Surface"])
         mat.surface_render_method='DITHERED'
-        mat.diffuse_color=(.20,.31,.33,.38)
+        mat.diffuse_color=(.10,.17,.17,.48)
     if slot in ("carPaint","carWood","carLeather","carTire","fabric","carLens"):
         coord=nodes.new("ShaderNodeTexCoord")
         noise=nodes.new("ShaderNodeTexNoise")
@@ -95,7 +104,8 @@ def _original_plates():
     ink=rgb(0xf0edd6)
     font_path=Path("C:/Windows/Fonts/malgun.ttf")
     font=bpy.data.fonts.load(str(font_path),check_existing=True) if font_path.exists() else None
-    for f,y,z in ((1,.432,2.373),(-1,.467,-2.391)):
+    for front,y,z in SEDAN_PLATES:
+        f=1 if front else -1
         _pill(name,"gloss","Existing green registration plate",(0,y,z),.342,.171,.005,rgb(0x467651),"z",.29)
         _cord(name,"gloss","Original ivory registration border",
               [(x,y+h,z+f*.003) for x,h in _elliptic(.320,.151,.25,34)],

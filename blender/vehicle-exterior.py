@@ -4,18 +4,23 @@ from math import atan2, copysign
 from mathutils import Matrix
 
 
+# Longitudinal stations matched against the low front and both rear reference views.
+# The axle centers stay fixed so that the build measures body contours against the rims.
 SEDAN_BODY = (
-    (-2.04,.877,.817,.253),(-1.85,.898,.867,.232),(-1.54,.912,.910,.216),
-    (-1.28,.909,.932,.207),(-.62,.893,.928,.198),(-.23,.897,.920,.194),
-    (.21,.895,.916,.194),(.67,.899,.915,.204),(1.03,.910,.907,.210),
-    (1.40,.910,.884,.223),(1.73,.897,.842,.232),(2.015,.868,.785,.253),
+    (-2.131,.879,.867,.278),(-1.988,.904,.916,.245),(-1.72,.926,.963,.233),
+    (-1.36,.929,.972,.226),(-.95,.925,.969,.217),(-.34,.925,.956,.214),
+    (.20,.924,.943,.216),(.68,.928,.934,.221),(1.03,.935,.919,.228),
+    (1.40,.931,.877,.231),(1.73,.911,.810,.241),(1.953,.869,.745,.266),
 )
 SEDAN_CABIN = (
-    (-1.374,.921,.822),(-1.208,1.067,.789),(-1.015,1.228,.743),
-    (-.799,1.361,.699),(-.592,1.425,.666),(-.348,1.452,.654),
-    (-.063,1.454,.658),(.197,1.438,.673),(.400,1.393,.702),
-    (.562,1.311,.729),(.761,1.151,.775),(.937,1.002,.819),(1.044,.922,.845),
+    (-1.851,.949,.792),(-1.69,1.048,.782),(-1.45,1.220,.735),
+    (-1.19,1.347,.680),(-1.062,1.382,.656),(-.67,1.415,.639),
+    (-.35,1.423,.633),(-.10,1.417,.646),(.16,1.388,.675),(.276,1.361,.694),
+    (.43,1.266,.730),(.57,1.152,.775),(.712,1.029,.812),(.819,.942,.838),
 )
+SEDAN_COWL = .819
+SEDAN_REAR_GLASS = -1.851
+SEDAN_ROOF = (-1.062,.276)
 SEDAN_PAINT = (1.0,1.0,1.0)
 SEDAN_CHROME = rgb(0xc9d0d2)
 SEDAN_ALLOY = rgb(0xafb4b2)
@@ -25,11 +30,12 @@ SEDAN_TRIM = rgb(0x77786f)
 SEDAN_LEATHER = rgb(0xc5b69a)
 SEDAN_WALNUT = rgb(0x77422a)
 SEDAN_CARPET = rgb(0x6d6656)
-SEDAN_PAINTS = {"Obsidian black":rgb(0x141719),"Pearl white":rgb(0xe9e8df),"Silver grey":rgb(0x8b9297)}
+SEDAN_PAINTS = {"Obsidian black":rgb(0x0a0b0d),"Pearl white":rgb(0xe9e8df),"Silver grey":rgb(0x8b9297)}
 SEDAN_WHEELS = (-1.405,1.405)
-SEDAN_DOORS = {True:(-.211,1.011),False:(-1.229,-.245)}
-SEDAN_HOOD = (0,.968,1.053)
-SEDAN_TRUNK = (0,.944,-1.360)
+SEDAN_DOORS = {True:(-.270,1.011),False:(-1.272,-.295)}
+SEDAN_HOOD = (0,.962,.902)
+SEDAN_TRUNK = (0,.969,-1.850)
+SEDAN_PLATES = ((True,.477,2.233),(False,.438,-2.385))
 
 
 def _profile(table, at, column):
@@ -59,24 +65,38 @@ def _cabin(z):
 
 def _side(side,z,v):
     distance = min(abs(z-axle) for axle in SEDAN_WHEELS)
-    arch = .270+.408*sqrt(max(0,1-(distance/.398)**2))
-    bottom = max(_profile(SEDAN_BODY,z,3),arch*(1-smooth(.377,.419,distance)))
-    crease = .014*exp(-((v-.88)/.086)**2)-.011*exp(-((v-.20)/.13)**2)
-    flare = .014*(1-smooth(.35,.57,distance))*(1-v)**4
-    x = _width(z)+.032*sin(pi*v)-.062*(1-v)**3+crease+flare
-    return (side*x,blend(bottom,_belt(z),v),z)
+    arch = .309+.362*sqrt(max(0,1-(distance/.364)**2))
+    bottom = max(_profile(SEDAN_BODY,z,3),arch*(1-smooth(.355,.380,distance)))
+    y = blend(bottom,_belt(z),v)
+    t = max(0,min(1,(y-.21)/max(.06,_belt(z)-.21)))
+    shoulder = .011*exp(-((t-.80)/.13)**2)
+    flare = .007*(1-smooth(.33,.53,distance))*(1-v)**5
+    x = _width(z)+.012*sin(pi*t)-.083*(1-t)**2.8+shoulder+flare
+    return (side*x,y,z)
+
+
+def _side_height(side,z,y):
+    bottom = _side(side,z,0)[1]
+    height = _belt(z)-bottom
+    return _side(side,z,max(0,min(1,(y-bottom)/height)))
 
 
 def _end(front,u,v):
     across = 2*u-1
     sign = 1 if front else -1
-    z0 = 2.015 if front else -2.04
+    z0 = SEDAN_BODY[-1 if front else 0][0]
     edge_x, edge_y, _ = _side(1,z0,v)
-    lower, upper = (.232,.754) if front else (.230,.849)
+    lower, upper = (.246,.706) if front else (.312,.895)
     y = blend(blend(lower,upper,v),edge_y,abs(across)**2)
-    shoulder = (1-abs(across)**2.80)**.66
-    roundness = .053*exp(-((v-.36)/.19)**2)-.012*exp(-((v-.62)/.08)**2)
-    return (edge_x*across,y,z0+sign*((.301 if front else .295)+roundness)*shoulder)
+    shoulder = (1-abs(across)**2.85)**.51
+    if front:
+        depth = .199+.068*exp(-((v-.48)/.36)**2)-.043*v**4
+        depth -= .145*exp(-((abs(across)-.66)/.233)**2)*smooth(.50,.79,v)
+    else:
+        depth = .199+.072*exp(-((v-.44)/.24)**2)-.025*smooth(.58,.70,v)
+        x = edge_x*across
+        depth -= .032*(1-smooth(.175,.207,abs(x)))*(1-smooth(.083,.111,abs(y-.438)))
+    return (edge_x*across,y,z0+sign*depth*shoulder)
 
 
 def _end_point(front,x,y,offset=0):
@@ -93,12 +113,15 @@ def _end_point(front,x,y,offset=0):
 
 def _deck(front,u,v):
     x_end,y_end,z_end = _end(front,u,1)
-    z = blend(1.037 if front else -1.356,z_end,v)
     across = u*2-1
-    x = blend(across*_side(1,z,1)[0],x_end,smooth(.78,1,v))
-    shoulder = (1-across*across)*(.048 if front else .029)
-    ribs = .008*exp(-((abs(across)-.57)/.086)**2)*sin(pi*v)
-    return (x,blend(_belt(z)+shoulder+ribs,y_end,smooth(.60,1,v)),z)
+    crown = 1-across*across
+    seam = SEDAN_COWL+.074*crown if front else SEDAN_REAR_GLASS-.036*crown
+    z = blend(seam,z_end,v)
+    x = blend(across*_side(1,z,1)[0],x_end,smooth(.72,1,v))
+    shoulder = crown*(.026 if front else .021)
+    ridge = .012*exp(-((abs(across)-.63)/.105)**2)*sin(pi*v)
+    weight = smooth(.52 if front else .48,1,v)
+    return (x,blend(_belt(z)+shoulder+ridge,y_end,weight),z)
 
 
 def _panel(name,slot,label,columns,rows,sample,color,flip=False,uv=None):
@@ -234,22 +257,22 @@ def _body_shell():
     name = _sedan_asset("body_shell")
     for side in (-1,1):
         for front in (False,True):
-            start = 1.025 if front else -1.243
-            end = 2.015 if front else -2.04
-            _panel(name,"carPaint",("Front" if front else "Rear")+" quarter panel",29,12,
+            start = 1.021 if front else -1.280
+            end = SEDAN_BODY[-1 if front else 0][0]
+            _panel(name,"carPaint",("Front" if front else "Rear")+" quarter panel",48,16,
                    lambda u,v:_side(side,blend(start,end,u),v),_paint_tint,flip=(side>0)==front)
-            _panel(name,"carPaint","Pressed fender shoulder",6,19,
-                   lambda u,v:_deck(front,blend(0,.137,u) if side<0 else blend(.863,1,u),v),
+            _panel(name,"carPaint","Pressed fender shoulder",10,30,
+                   lambda u,v:_deck(front,blend(0,.117,u) if side<0 else blend(.883,1,u),v),
                    SEDAN_PAINT,flip=front)
-            axle = 1.405 if front else -1.405
-            arc = [_side(side,axle+.410*cos(pi*t),0) for t in _range(35)]
-            _cord(name,"plain","Rolled arch sealing flange",[_add(p,(-side*.023,-.006,0)) for p in arc],
-                  .014,SEDAN_RUBBER)
-            liner = [[(side*x, .309+.358*sin(pi*t), axle+.395*cos(pi*t)) for t in _range(26)]
-                     for x in (.655,.813,.892)]
+            axle = SEDAN_WHEELS[1 if front else 0]
+            arc = [_side(side,axle+.366*cos(pi*t),0) for t in _range(39)]
+            _cord(name,"plain","Rolled arch sealing flange",[_add(p,(-side*.026,-.005,0)) for p in arc],
+                  .008,SEDAN_RUBBER)
+            liner = [[(side*x, .309+.353*sin(pi*t), axle+.358*cos(pi*t)) for t in _range(33)]
+                     for x in (.658,.784,.891)]
             rows_mesh(name,"plain","Inner wheel liner",liner,rgb(0x262725),caps=False,ring=False)
         _panel(name,"carPaint","Curved rocker below doors",31,5,
-               lambda u,v:(side*(.801+.078*sin(pi*v*.75)),blend(.165,.262,v),blend(-1.067,1.008,u)),
+               lambda u,v:(side*(.809+.037*sin(pi*v*.7)),blend(.197,.253,v),blend(-1.075,1.041,u)),
                _paint_tint,flip=side>0)
         _cord(name,"plain","Continuous door aperture seal",
               [(side*.844,.246,z) for z in (-1.17,-.45,.29,1.02)],.015,SEDAN_RUBBER)
@@ -262,66 +285,82 @@ def _body_shell():
             seal=_elliptic(.168,.142,.34,28)
             _bezel(name,"plain","Fuel door recess",seal,fuel,[(1,.002),(.92,.004)],SEDAN_BLACK)
             _bezel(name,"carPaint","Flush filler door",seal,fuel,[(.94,.005),(.86,.008)],SEDAN_PAINT,True)
-        z = 1.721
-        side_at = _side(side,z,.75)
-        _pill(name,"plain","Front wing indicator gasket",_add(side_at,(side*.005,.004,0)),.112,.057,.014,
+        z = 1.071
+        side_at = _side_height(side,z,.695)
+        _pill(name,"plain","Front wing indicator gasket",_add(side_at,(side*.005,.004,0)),.082,.042,.012,
               SEDAN_RUBBER,"x",.76)
-        _pill(name,"carLens","Amber repeater",_add(side_at,(side*.015,.004,0)),.091,.040,.014,
-              rgb(0xc9902e),"x",.75)
+        _pill(name,"carLens","Amber repeater",_add(side_at,(side*.013,.004,0)),.066,.031,.012,
+              rgb(0xdd8e16),"x",.75)
 
-    _panel(name,"carPaint","One-piece rounded front bumper",43,20,lambda u,v:_end(True,u,v),_paint_tint)
-    _panel(name,"carPaint","Rounded rear bumper and valance",43,16,lambda u,v:_end(False,u,v*.67),_paint_tint,flip=True)
-    for limit in ((0,.136),(.864,1)):
-        _panel(name,"carPaint","Rear corner above bumper",12,12,
-               lambda u,v:_end(False,blend(*limit,u),blend(.67,1,v)),_paint_tint,flip=True)
+    _panel(name,"carPaint","One-piece rounded front bumper",65,29,lambda u,v:_end(True,u,v),_paint_tint)
+    _panel(name,"carPaint","Rounded rear bumper and valance",65,22,lambda u,v:_end(False,u,v*.612),_paint_tint,flip=True)
+    for limit in ((0,.116),(.884,1)):
+        _panel(name,"carPaint","Rear corner above bumper",12,18,
+               lambda u,v:_end(False,blend(*limit,u),blend(.616,1,v)),_paint_tint,flip=True)
+    _cord(name,"plain","Bumper to quarter-panel seam",
+          [_end(False,t,.614) for t in _range(84)],.003,rgb(0x101212))
 
     def face(front,x,y):
         return lambda u,v,offset:_end_point(front,x+u,y+v,offset)
-    grille = _elliptic(.694,.150,.53,34)
-    _bezel(name,"plain","Deep black radiator grille",grille,face(True,0,.669),[(1,.008),(.94,.021)],SEDAN_BLACK,True)
-    _bezel(name,"carMetal","Thin bright grille perimeter",grille,face(True,0,.669),
-           [(1,.021),(.995,.028),(.940,.031),(.927,.023)],SEDAN_CHROME)
-    for i in range(-4,5):
-        x=i*.071
-        def slat(u,v):
-            y=blend(.611+.015*(x/.32)**2,.729-.013*(x/.32)**2,v)
-            inner=x+(u-.5)*(.014+.006*v)+x*.15*(1-v)
-            return _end_point(True,inner,y,.023+.014*sin(pi*v))
-        _panel(name,"carMetal","Curved grille slat",3,8,slat,SEDAN_CHROME)
-    _badge(name,_end_point(True,0,.662,.046),.097,"z",SEDAN_CHROME)
+    grille = _outline([(-.392,.020),(-.362,.062),(-.261,.074),(0,.078),(.261,.074),
+                       (.362,.062),(.392,.020),(.370,-.040),(.302,-.056),(0,-.060),
+                       (-.302,-.056),(-.370,-.040)],4)
+    project_grille = face(True,0,.636)
+    _bezel(name,"plain","Deep black grille insert",grille,project_grille,
+           [(1,.006),(.956,.010),(.90,.012)],rgb(0x111517),True)
+    _bezel(name,"plain","Painted dark grille perimeter",grille,project_grille,
+           [(1,.007),(1,.017),(.959,.021),(.944,.016)],rgb(0x16191a))
+    for i in range(-6,7):
+        x=i*.053
+        height = 1-.25*(x/.355)**4
+        def slat(u,v,tip=0):
+            y=.640+height*blend(-.043,.063,v)
+            bend=.015*(1-v)-.017*sin(pi*v)
+            inner=x+bend+(u-.5)*(.019+.005*v)
+            return _end_point(True,inner,y,.016+.017*sin(pi*v)+tip)
+        _panel(name,"plain","Black vertical radiator fin",3,10,slat,rgb(0x202325))
+        if i%2==0:
+            _panel(name,"carMetal","Silver fin leading face",3,10,
+                   lambda u,v:slat(blend(.37,.96,u),blend(.57 if i==0 else .04,.97,v),.004),SEDAN_CHROME)
+    _badge(name,_end_point(True,0,.635,.043),.096,"z",SEDAN_CHROME)
 
-    lower = _elliptic(.807,.145,.49,34)
-    _bezel(name,"plain","Lower central opening",lower,face(True,0,.318),[(1,.008),(.92,.013)],SEDAN_BLACK,True)
-    for y in (.289,.315,.337):
-        _cord(name,"plain","Recessed intake vane",[_end_point(True,blend(-.362,.362,t),y,.018)
-              for t in _range(22)],.0053,rgb(0x323637))
+    lower = _elliptic(.862,.125,.43,38)
+    _bezel(name,"plain","Recessed lower air inlet",lower,face(True,0,.325),
+           [(1,.003),(.952,.008),(.89,.010)],rgb(0x060708),True)
+    for y in (.304,.337):
+        _cord(name,"plain","Set-back horizontal intake vane",[_end_point(True,blend(-.363,.363,t),y,.012)
+              for t in _range(32)],.0026,rgb(0x171919))
     for side in (-1,1):
-        fog=_elliptic(.205,.077,.52,24)
-        _bezel(name,"plain","Fog light surround",fog,face(True,side*.591,.328),[(1.18,.012),(1.07,.020)],SEDAN_BLACK)
-        _bezel(name,"carLens","Ribbed clear fog lamp",fog,face(True,side*.591,.328),
-               [(1,.019),(.90,.028),(.76,.031)],rgb(0xa6b4b3),True)
+        fog=_elliptic(.212,.073,.46,30)
+        _bezel(name,"plain","Inset fog light surround",fog,face(True,side*.595,.330),[(1.15,.006),(1.04,.013)],SEDAN_BLACK)
+        _bezel(name,"carLens","Ribbed clear fog lamp",fog,face(True,side*.595,.330),
+               [(1,.012),(.92,.019),(.73,.021)],rgb(0x9da7a4),True)
         for i in range(10):
-            x=side*.591+(i-4.5)*.014
+            x=side*.595+(i-4.5)*.014
             _cord(name,"carMetal","Fog lens reflector flute",
-                  [_end_point(True,x,.310,.032),_end_point(True,x+.005,.343,.032)],.00085,SEDAN_ALLOY)
-    for y,z in ((.432,2.361),(.467,-2.379)):
-        box(name,"plain","Existing plate mounting recess",(0,y,z),(.380,.188,.013),SEDAN_RUBBER,.006)
+                  [_end_point(True,x,.314,.022),_end_point(True,x+.005,.342,.022)],.00085,SEDAN_ALLOY)
+    for front,y,z in SEDAN_PLATES:
+        sign=1 if front else -1
+        box(name,"plain","Existing plate mounting recess",(0,y,z-sign*.010),(.366,.181,.015),SEDAN_RUBBER,.005)
         for side in (-1,1):
             lathe(name,"carMetal","Plate mounting screw",[(-.003,.005,.005),(.003,.005,.005)],
                   SEDAN_ALLOY,10,(side*.155,y+.065,z),axis="z")
-    _cord(name,"plain","Backbox outlet pipe",catmull([(-.500,.173,-1.686),(-.533,.170,-1.932),
-          (-.562,.177,-2.092),(-.567,.191,-2.242)],4),.027,rgb(0x373936),sides=12)
+    _cord(name,"plain","Backbox outlet pipe",catmull([(-.504,.236,-1.70),(-.533,.236,-1.932),
+          (-.554,.232,-2.040),(-.557,.234,-2.152)],4),.024,rgb(0x373936),sides=12)
     lathe(name,"carMetal","Rolled exhaust tip",[(-.030,.027,.029),(0,.032,.034),(.028,.031,.033),(.028,.023,.026)],
-          rgb(0x7e8584),22,(-.569,.192,-2.224),axis="z",caps=False)
-    box(name,"plain","Recessed underbody floor pan",(0,.166,-.05),(1.32,.080,3.77),SEDAN_BLACK,.028)
+          rgb(0x555b5b),22,(-.558,.234,-2.146),axis="z",caps=False)
+    box(name,"plain","Recessed underbody floor pan",(0,.216,-.12),(1.32,.066,3.54),SEDAN_BLACK,.028)
 
 
 def _lids():
     for front in (False,True):
         key="hood" if front else "trunk_lid"
         name=_sedan_asset(key,SEDAN_HOOD if front else SEDAN_TRUNK)
+        hinge=ASSETS[name]["sedan"]["at"]
+        latch=_deck(front,.50,.959)
+        ASSETS[name]["anchors"]={"hinge":hinge,"latch":_add(latch,_scale(hinge,-1))}
         def skin(u,v,drop=0):
-            x,y,z=_deck(front,blend(.140,.860,u),v)
+            x,y,z=_deck(front,blend(.120,.880,u),v)
             return (x,y+.002-drop,z)
         _panel(name,"carPaint","Crowned outer panel",24,26,skin,SEDAN_PAINT,flip=front)
         _panel(name,"carPaint","Pressed inner shell",20,18,lambda u,v:skin(u,v,.020),
@@ -329,17 +368,17 @@ def _lids():
         for edge in ((0,None),(1,None),(None,0),(None,1)):
             _cord(name,"carPaint","Hemmed panel edge",
                   [skin(t if edge[0] is None else edge[0],t if edge[1] is None else edge[1],.011)
-                   for t in _range(21)],.009,SEDAN_PAINT)
+                   for t in _range(25)],.0045,SEDAN_PAINT)
         _panel(name,"fabric","Molded underside insulation",11,15,
                lambda u,v:skin(blend(.12,.88,u),blend(.13,.82,v),.027),rgb(0x333435),flip=not front)
         for side in (-1,1):
             _cord(name,"carPaint","Stamped reinforcement rib",
                   [skin(.5+side*blend(.109,.383,t),blend(.09,.94,t),.033) for t in _range(20)],
                   .013,rgb(0x8f9192))
-            hinge_z=1.065 if front else -1.385
+            hinge_z=SEDAN_HOOD[2]+.008 if front else SEDAN_TRUNK[2]+.015
             _cord(name,"carMetal","Hinge arm",catmull([(side*.487,.822,hinge_z),
-                   (side*.487,.862,hinge_z+(.105 if front else -.21)),
-                   (side*.469,.901,hinge_z+(.260 if front else -.36))]),
+                   (side*.487,.862 if front else .836,hinge_z+(.105 if front else -.13)),
+                   (side*.469,.901 if front else .851,hinge_z+(.260 if front else -.29))]),
                    .013,rgb(0x666c69))
         if front:
             _bezel(name,"carMetal","Bonnet latch staple",_elliptic(.074,.032,.55,20),
@@ -347,32 +386,36 @@ def _lids():
                    [(1,-.004),(1,.004),(.70,.004),(.70,-.004)],SEDAN_ALLOY)
             continue
         _panel(name,"carPaint","Decklid vertical face",29,12,
-               lambda u,v:_add(_end(False,blend(.139,.861,u),blend(.674,1,v)),(0,0,-.003)),
+               lambda u,v:_add(_end(False,blend(.119,.881,u),blend(.619,1,v)),(0,0,-.003)),
                SEDAN_PAINT,flip=True)
         _panel(name,"carMetal","Satin bright rear garnish",25,5,
-               lambda u,v:_end_point(False,blend(-.608,.608,u),blend(.650,.706,v),.010+.003*sin(pi*v)),
+               lambda u,v:_end_point(False,blend(-.604,.604,u),blend(.657,.728,v),.010+.003*sin(pi*v)),
                rgb(0x999b9a),flip=True)
         _cord(name,"carMetal","Bright garnish lip",
-              [_end_point(False,blend(-.548,.548,t),.709,.016) for t in _range(27)],.0046,SEDAN_CHROME)
+               [_end_point(False,blend(-.548,.548,t),.728,.016) for t in _range(32)],.0034,SEDAN_CHROME)
         for i,letter in enumerate("SONATA"):
-            _letter(name,"carMetal",letter,_end_point(False,(2.5-i)*.121,.661,.016),.035,SEDAN_CHROME,
+            _letter(name,"carMetal",letter,_end_point(False,(2.5-i)*.126,.678,.016),.038,SEDAN_CHROME,
                     right=(-1,0,0),rise=.00115)
-        _letter(name,"carMetal","GVS",_end_point(False,-.511,.771,.012),.026,SEDAN_CHROME,right=(-1,0,0),rise=.0006)
-        _badge(name,_end_point(False,0,.772,.015),.105,"z",SEDAN_CHROME,True)
+        _letter(name,"carMetal","GVS",_end_point(False,-.514,.791,.012),.031,SEDAN_CHROME,right=(-1,0,0),rise=.0006)
+        _badge(name,_end_point(False,0,.807,.015),.103,"z",SEDAN_CHROME,True)
         lathe(name,"carMetal","Trunk lock bezel",[(0,.012,.012),(.005,.013,.013),(.008,.010,.010)],
-              SEDAN_CHROME,18,_end_point(False,-.428,.675,.015),axis="z")
-        box(name,"plain","Deck lock keyway",_end_point(False,-.428,.675,.021),(.0034,.011,.002),SEDAN_BLACK)
+              SEDAN_CHROME,18,_end_point(False,-.428,.690,.015),axis="z")
+        box(name,"plain","Deck lock keyway",_end_point(False,-.428,.690,.021),(.0034,.011,.002),SEDAN_BLACK)
 
 
 def _lamp_sample(front,side,u,v):
     if front:
-        lower = _profile(((0,.654),(.10,.626),(.41,.623),(.74,.644),(.92,.682),(1,.719)),u,1)
-        upper = _profile(((0,.683),(.14,.743),(.43,.779),(.72,.806),(.91,.790),(1,.748)),u,1)
-        x = side*blend(.349,.857,u)
+        # Edge positions obtained by projecting the outline of the photographed lens onto the fascia.
+        span = blend(.502,.914,u)
+        lower = _profile(((.502,.612),(.515,.588),(.549,.568),(.617,.561),(.720,.560),
+                          (.795,.564),(.852,.578),(.883,.600),(.903,.638),(.914,.690)),span,1)
+        upper = _profile(((.502,.620),(.511,.649),(.534,.687),(.586,.707),(.686,.716),
+                          (.778,.723),(.847,.732),(.880,.731),(.901,.719),(.914,.695)),span,1)
+        x = side*span
     else:
-        lower = _profile(((0,.551),(.20,.542),(.77,.541),(1,.585)),u,1)
-        upper = _profile(((0,.751),(.12,.805),(.45,.842),(.71,.826),(.91,.748),(1,.619)),u,1)
-        x = side*blend(.598,.862,u)
+        lower = _profile(((0,.685),(.15,.666),(.65,.664),(.90,.675),(1,.713)),u,1)
+        upper = _profile(((0,.759),(.14,.848),(.38,.901),(.57,.915),(.78,.881),(.92,.816),(1,.724)),u,1)
+        x = side*blend(.590,.877,u)
     y=blend(lower,upper,v)
     return x,y
 
@@ -385,54 +428,63 @@ def _lamps():
             lens=_sedan_asset("lamp_"+suffix)
             def lamp(u,v,depth):
                 x,y=_lamp_sample(front,side,u,v)
-                p=_end_point(front,x,y,depth)
-                wrap=smooth(.64,1,u)
-                flare=.031*wrap if front else .027*wrap
-                return (x,y,p[2]+(-flare if front else flare))
+                if front:
+                    depth += .006*smooth(.46,.90,u)
+                    depth -= .094*smooth(.868,.914,abs(x))
+                else:
+                    depth += .010*(1-smooth(.73,1,u))
+                p = _end_point(front,x,y,depth)
+                if front and p[2]<SEDAN_BODY[-1][0]:
+                    # Seat the outer lens just outside the adjoining wing.
+                    outer = abs(_side_height(side,p[2],y)[0])+.003
+                    p = (side*max(abs(x),outer), y, p[2])
+                return p
             def edge():
-                return ([lamp(t,0,.018) for t in _range(23)]+[lamp(1,t,.018) for t in _range(7)][1:]+
-                        [lamp(1-t,1,.018) for t in _range(23)][1:]+[lamp(0,1-t,.018) for t in _range(7)][1:-1])
+                return ([lamp(t,0,.012) for t in _range(32)]+[lamp(1,t,.012) for t in _range(7)][1:]+
+                        [lamp(1-t,1,.012) for t in _range(32)][1:]+[lamp(0,1-t,.012) for t in _range(7)][1:-1])
             flip=(side<0)==front
-            _panel(socket,"plain","Recessed dual lamp housing",22,11,lambda u,v:lamp(u,v,.009),SEDAN_BLACK,flip)
-            _cord(socket,"plain","Lamp perimeter gasket",edge(),.0086,SEDAN_RUBBER,closed=True)
-            for t in (.27,.59,.84):
-                at=lamp(t,.50,.012)
-                outline=_elliptic(.099 if front else .073,.091,.83,20)
+            _panel(socket,"plain","Recessed dual lamp housing",30,13,lambda u,v:lamp(u,v,.006),SEDAN_BLACK,flip)
+            _cord(socket,"plain","Narrow lens gasket",edge(),.005,SEDAN_RUBBER,closed=True)
+            for t in (.29,.59,.83):
+                x,y,_=lamp(t,.50,.008)
+                outline=_elliptic(.079 if front else .059,.072,.83,20)
                 _bezel(socket,"carMetal","Aluminized reflector cup",outline,
-                       lambda u,v,d:_add(at,(u,v,(1 if front else -1)*d)),
-                       [(1,.002),(.64,-.004),(.22,-.009),(.08,-.010)],SEDAN_ALLOY,True)
+                       lambda u,v,d:_end_point(front,x+u,y+v,.005+d),
+                       [(1,.003),(.64,.001),(.22,-.005),(.08,-.008)],SEDAN_ALLOY,True)
             def glass(u,v):
-                return lamp(u,v,.019+.019*sin(pi*v)*sin(pi*u)**.6)
+                return lamp(u,v,.013+.016*sin(pi*v)*sin(pi*u)**.6)
             def tint(p,front=front):
-                x,y,z=p
-                start,width=(.349,.508) if front else (.598,.264)
+                x,y,_=p
+                start,width=(.502,.412) if front else (.590,.287)
                 u=(abs(x)-start)/width
                 if front:
-                    base=rgb(0xd19933) if u>=.751 else rgb(0xcbd7d5)
-                    fiber=.91+.080*cos(u*62*pi)+.033*cos(y*310)
+                    base=rgb(0xe9a12c) if u>=.705 else rgb(0xcbd3cd)
+                    ribs=.067*cos(u*81*pi)+.026*cos(y*340)
+                    bands=.10*exp(-((y-blend(.605,.686,u))/.013)**2)*(1-smooth(.67,.73,u))
+                    fiber=.92+ribs-bands
                 else:
-                    base=rgb(0xb82c29) if y>.610+u*.005 else rgb(0xc4cbbe if u<.30 else 0xd1922e)
-                    fiber=.91+.077*cos(y*345)+.029*sin(u*89)
+                    base=rgb(0xd0241e) if y>.734+u*.005 else rgb(0xc4c9bf if u<.31 else 0xec9c12)
+                    fiber=.92+.071*cos(y*422)+.031*cos(u*149)*cos(y*238)
                 return tone(base,fiber)
-            limits=[(0,.748),(.751,1)] if front else [(0,1)]
+            limits=[(0,.703),(.705,1)] if front else [(0,1)]
             for i,(a,b) in enumerate(limits):
                 _panel(lens,"carLens",("Clear ribbed lens" if i==0 else "Amber turn signal"),
-                       39 if i==0 else 14,14,lambda u,v:glass(blend(a,b,u),v),tint,flip,
+                       52 if i==0 else 18,25,lambda u,v:glass(blend(a,b,u),v),tint,flip,
                        uv=lambda p:(abs(p[0])*34,p[1]*22))
-            _cord(lens,"carLens","Lens flange",edge(),.0019,rgb(0x888d84),closed=True)
+            _cord(lens,"carLens","Co-molded lens edge",edge(),.0015,rgb(0x777c75),closed=True)
 
 
 def _side_glass_point(side,front,u,v):
     lo,hi=SEDAN_DOORS[front]
     if front:
-        z=blend(lo+.025+.015*v,hi-.019-.049*v**1.8,u)
+        z=blend(lo+.022-.074*v,.786-.041*v**1.7,u)
     else:
-        z=blend(lo+.023+.359*v**2,hi-.028-.013*v,u)
+        z=blend(lo+.019+.405*(.67*v**2+.33*v**5),hi-.020-.068*v,u)
     top,inset=_cabin(z)
     bottom=_belt(z)+.012
     side_x=_side(1,z,1)[0]-.021
     y=blend(bottom,max(bottom+.022,top-.023),v)
-    return (side*(blend(side_x,inset-.005,v)+.015*sin(pi*v)),y,z)
+    return (side*(blend(side_x,inset-.006,v)+.025*sin(pi*v)**1.25),y,z)
 
 
 def _side_frame(name,side,front):
@@ -444,28 +496,32 @@ def _side_frame(name,side,front):
         ("Door window rear edge",[pane(0,v) for v in _range(17)]),
         ("Door window leading edge",[pane(1,v) for v in _range(17)]),
     ):
-        _cord(name,"plain",label,line,.013 if "Upper" in label else .011,SEDAN_RUBBER)
-    _cord(name,"carMetal","Polished belt trim",[_add(pane(t,0),(side*.008,-.011,0)) for t in _range(27)],
-          .0037,rgb(0xb2b9bb))
+        _cord(name,"plain",label,line,.008 if "Upper" in label else .007,SEDAN_RUBBER)
+    _cord(name,"carMetal","Polished belt trim",[_add(pane(t,0),(side*.006,-.007,0)) for t in _range(31)],
+          .0026,rgb(0xa9acab))
 
 
 def _end_glass_point(front,u,v):
-    a,b=(.412,1.041) if front else (-1.374,-.783)
+    a,b=(SEDAN_ROOF[1],SEDAN_COWL) if front else (SEDAN_REAR_GLASS,SEDAN_ROOF[0])
     z=blend(a,b,v)
     y,inset=_cabin(z)
     across=2*u-1
-    bow=(1-across*across)*sin(pi*v)
-    return (across*(inset-.013),y+.020*(1-across*across),
-            z+(1 if front else -1)*.036*bow)
+    crown=1-across*across
+    lower = v if front else 1-v
+    # The lower corners curl inboard. The center of each pane bows towards its deck.
+    corner=.024*smooth(.80,1,abs(across))*smooth(.83,1,lower)
+    bow=crown*(.022*sin(pi*v)+(.071 if front else .035)*lower**2)
+    return (across*(inset-.018-corner),y+.013*crown+corner*.54,
+            z+(1 if front else -1)*(bow-corner))
 
 
 def _green_glass(front):
     def tint(p):
-        color=rgb(0x536465) if front else rgb(0x4f6161)
+        color=rgb(0x475e5b) if front else rgb(0x3c4b4b)
         if front:
             return _lerp(color,rgb(0x344f61),.76*smooth(1.297,1.397,p[1]))
         # Heated rear glass keeps a warmer, narrow tint at each heater wire.
-        wire = max(0,cos((p[2]+1.374)*tau/.061))**22
+        wire = max(0,cos((p[2]-SEDAN_REAR_GLASS)*tau/.061))**22
         return _lerp(color,rgb(0x665748),wire*.46)
     return tint
 
@@ -473,10 +529,10 @@ def _green_glass(front):
 def _roof_and_glazing():
     roof=_sedan_asset("roof")
     def roof_panel(u,v,drop=0):
-        z=blend(-.784,.413,v)
+        z=blend(*SEDAN_ROOF,v)
         y,w=_cabin(z)
-        return ((2*u-1)*w,y+.022*sin(pi*u)**1.56-drop,z)
-    _panel(roof,"carPaint","Crowned steel roof",24,33,roof_panel,SEDAN_PAINT,True)
+        return ((2*u-1)*w,y+.018*sin(pi*u)**1.62-drop,z)
+    _panel(roof,"carPaint","Crowned steel roof",36,42,roof_panel,SEDAN_PAINT,True)
     _panel(roof,"fabric","Felt headliner",16,20,lambda u,v:roof_panel(u,v,.034),rgb(0xa49a84))
 
     for front in (False,True):
@@ -487,48 +543,67 @@ def _roof_and_glazing():
                32,38 if not front else 24,pane,_green_glass(front),True)
         for edge in (0,1):
             line=[pane(t,edge) for t in _range(31)]
-            _cord(roof,"plain","Glazing encapsulated seal",line,.010,rgb(0x1d2021))
-            _cord(roof,"plain","Glazing side rubber",[pane(edge,t) for t in _range(23)],.011,SEDAN_RUBBER)
+            _cord(roof,"plain","Glazing encapsulated seal",line,.006,rgb(0x1d2021))
+            _cord(roof,"plain","Glazing side rubber",[pane(edge,t) for t in _range(33)],.0065,SEDAN_RUBBER)
+        deck_edge=1 if front else 0
+        _panel(roof,"plain","Glazing to deck sealed return",34,6,
+               lambda u,v:_lerp(pane(u,deck_edge),_deck(front,blend(.055,.945,u),0),v),
+               rgb(0x222626),flip=front)
 
     for side in (-1,1):
-        rim=[(side*_cabin(z)[1],_cabin(z)[0]+.004,z) for z in (blend(-.783,.413,t) for t in _range(31))]
-        _cord(roof,"carPaint","Gutter above doors",rim,.010,SEDAN_PAINT)
-        _cord(roof,"plain","Roof ditch rubber",[_add(p,(-side*.013,.004,0)) for p in rim],.004,SEDAN_RUBBER)
-        def pillar(front,u,v):
-            glass = _side_glass_point(side,front,1 if front else 0,v)
-            if front:
-                outer = _end_glass_point(True,1 if side>0 else 0,1-.97*v)
-            else:
-                # Keep the painted C-pillar broad at the belt and narrow at the roof.
-                outer = _end_glass_point(False,1 if side>0 else 0,.96*v)
-            return _lerp(outer,glass,u)
+        rim=[(side*_cabin(z)[1],_cabin(z)[0]+.003,z) for z in (blend(*SEDAN_ROOF,t) for t in _range(41))]
+        _cord(roof,"carPaint","Gutter above doors",rim,.006,SEDAN_PAINT)
+        _cord(roof,"plain","Roof ditch rubber",[_add(p,(-side*.012,.002,0)) for p in rim],.0026,SEDAN_RUBBER)
+        edge = 1 if side>0 else 0
+        def a_pillar(u,v):
+            outer = _end_glass_point(True,edge,v)
+            z = blend(SEDAN_ROOF[1]-.030,.745,v)
+            y,x = _cabin(z)
+            inner = (side*(x-.006),y-.023,z)
+            return _add(_lerp(outer,inner,u),(side*.006*sin(pi*u),.005*sin(pi*u),0))
+        def c_pillar(u,v):
+            outer = _end_glass_point(False,edge,v)
+            inner = _side_glass_point(side,False,0,v)
+            return _add(_lerp(outer,inner,u),(side*.026*sin(pi*u)*sin(pi*v)**.5,.010*sin(pi*u),0))
         _panel(roof,"carPaint","A pillar" if side<0 else "Driver A pillar",9,24,
-               lambda u,v:pillar(True,u,v),SEDAN_PAINT,flip=side<0)
-        _panel(roof,"carPaint","Sculpted C pillar",11,25,lambda u,v:pillar(False,u,v),SEDAN_PAINT,flip=side>0)
+               a_pillar,SEDAN_PAINT,flip=side>0)
+        _panel(roof,"carPaint","Quarter panel between rear glass and door",18,33,
+               c_pillar,SEDAN_PAINT,flip=side>0)
+        for front, footing in ((True,lambda u:a_pillar(u,1)),(False,lambda u:c_pillar(u,0))):
+            def pillar_heel(u,v):
+                start=footing(u)
+                return _lerp(start,_side(side,start[2],1),v)
+            _panel(roof,"carPaint",("Front" if front else "Rear")+" pillar heel into the beltline",18,5,
+                   pillar_heel,SEDAN_PAINT,flip=(side<0)!=front)
         def midpillar(u,v):
-            z=blend(-.260,-.202,u)
-            y,inset=_cabin(z)
-            belt=_belt(z)
-            return (side*blend(_side(1,z,1)[0]-.032,inset-.018,v),blend(belt-.027,y-.016,v),z)
-        _panel(roof,"plain","Black B-pillar cover",4,18,midpillar,rgb(0x222525),flip=side>0)
-        _cord(roof,"carLeather","Interior pillar trim",[_add(pillar(True,.50,t),(-side*.026,-.012,0))
+            return _lerp(_side_glass_point(side,False,1,v),_side_glass_point(side,True,0,v),u)
+        _panel(roof,"plain","Black B-pillar cover",7,24,midpillar,rgb(0x212324),flip=side>0)
+        for front in (False,True):
+            z0,z1 = (SEDAN_ROOF[0],-.365) if not front else (-.322,SEDAN_ROOF[1])
+            def gutter(u,v):
+                z=blend(z0,z1,u)
+                y,x=_cabin(z)
+                return (side*(x-.005*v),y-.023*v,z)
+            _panel(roof,"carPaint","Painted roof edge over door glass",19,4,gutter,SEDAN_PAINT,flip=side<0)
+        _cord(roof,"carLeather","Interior pillar trim",[_add(a_pillar(.46,t),(-side*.027,-.012,0))
               for t in _range(23)],.024,SEDAN_TRIM)
     _headliner_details(roof)
 
     name=_sedan_asset("wipers")
-    box(name,"plain","Cowl air tray",(0,.926,1.039),(1.48,.035,.115),SEDAN_BLACK,.012)
+    box(name,"plain","Cowl air tray",(0,.933,.895),(1.48,.024,.086),SEDAN_BLACK,.010)
     for side in (-1,1):
         for i in range(16):
             x=side*(.17+i*.029)
-            box(name,"gloss","Cowl ventilation slots",(x,.946,1.067),(.010,.0026,.039),rgb(0x373a37),.001)
-        at=(side*.414,.962,1.024)
-        elbow=(side*.324,.996,.987)
-        end=(side*.324-.169,1.025,.934)
-        tip=(side*.324+.177,1.007,.949)
-        lathe(name,"plain","Wiper spindle",[(0,.017,.017),(.011,.015,.015)],SEDAN_BLACK,14,at)
-        _cord(name,"plain","Parked wiper arm",[at,elbow],.009,SEDAN_BLACK)
-        _cord(name,"plain","Wiper blade with backbone",catmull([end,(side*.321,1.022,.936),tip]),
-              .009,rgb(0x262929))
+            box(name,"gloss","Cowl ventilation slots",(x,.947,.912),(.009,.0026,.031),rgb(0x373a37),.001)
+        def wiped(u,v):
+            return _add(_end_glass_point(True,u,v),(0,.010,.016))
+        at=wiped(.50+side*.251,.997)
+        elbow=wiped(.51+side*.177,.938)
+        blade=[wiped(blend(.50+side*.189-.127,.50+side*.189+.123,t),.928+.025*t)
+               for t in _range(21)]
+        lathe(name,"plain","Wiper spindle",[(0,.013,.013),(.009,.011,.011)],SEDAN_BLACK,14,at)
+        _cord(name,"plain","Parked wiper arm",[at,elbow],.006,SEDAN_BLACK)
+        _cord(name,"plain","Wiper blade with backbone",blade,.0065,rgb(0x262929))
 
 
 def _doors_and_mirrors():
@@ -540,47 +615,49 @@ def _doors_and_mirrors():
             name=_sedan_asset("door_"+suffix,pivot)
             def skin(u,v):
                 return _side(side,blend(lo,hi,u),v)
-            _panel(name,"carPaint","Curved door skin",26,16,skin,_paint_tint,flip=side>0)
+            _panel(name,"carPaint","Curved door skin",43,22,skin,_paint_tint,flip=side>0)
             boundary=([skin(t,0) for t in _range(22)]+[skin(1,t) for t in _range(14)][1:]+
                       [skin(1-t,1) for t in _range(22)][1:]+[skin(0,1-t) for t in _range(14)][1:-1])
             _cord(name,"plain","Stamped edge shadow",[_add(p,(-side*.013,0,0)) for p in boundary],
-                  .010,SEDAN_BLACK,closed=True)
+                  .006,SEDAN_BLACK,closed=True)
             _cord(name,"carPaint","Door shell return",[_add(p,(-side*.029,.003,0)) for p in boundary],
-                  .011,SEDAN_PAINT,closed=True)
-            z=lo+.196
-            x,y,_=_side(side,z,.828)
-            recess=_elliptic(.189,.055,.71,30)
+                  .008,SEDAN_PAINT,closed=True)
+            z=lo+(.180 if front else .177)
+            x,y,_=_side_height(side,z,.811 if front else .833)
+            recess=_elliptic(.212,.066,.75,36)
             def pull(u,v,d):
-                return (x+side*(d-.012*(u/.097)**2),y+v,z+u)
+                return (x+side*(d-.009*(u/.105)**2),y+v,z+u)
             grip={
-                "pull":pull(0,.004,.036),
+                "pull":pull(0,.006,.025),
                 "release":(side*.749,_belt((lo+hi)/2)-.155,hi-.16),
                 "lock":(side*.844,_belt(lo+.293)+.020,lo+.293),
             }
             ASSETS[name]["anchors"]={key:_add(at,_scale(pivot,-1)) for key,at in grip.items()}
+            ASSETS[name]["anchors"]["hinge"]=pivot
             _bezel(name,"plain","Exterior pull pocket",recess,pull,
-                   [(1,.002),(.95,.007),(.83,.012)],SEDAN_BLACK,True)
-            _bezel(name,"carPaint","Painted pull handle",_elliptic(.149,.033,.61,28),
-                   lambda u,v,d:pull(u,v+.004,d),[(.97,.017),(1,.026),(.83,.036)],SEDAN_PAINT,True)
+                   [(1,.002),(.95,.006),(.83,.008)],rgb(0x171a1b),True)
+            _bezel(name,"carPaint","Painted pull handle",_elliptic(.170,.033,.65,32),
+                   lambda u,v,d:pull(u,v+.005,d),[(.96,.012),(1,.021),(.84,.026)],SEDAN_PAINT,True)
             _cord(name,"carMetal","Exterior handle bright edge",
-                  [pull(blend(-.067,.066,t),.017+sin(pi*t)*.003,.034) for t in _range(18)],
-                  .0025,SEDAN_CHROME)
+                  [pull(blend(-.073,.070,t),.017+sin(pi*t)*.004,.026) for t in _range(21)],
+                  .0019,SEDAN_CHROME)
             if front:
-                _pill(name,"carMetal","Front door lock cylinder",pull(-.065,-.003,.038),.018,.022,.009,SEDAN_ALLOY,"x")
-                _pill(name,"plain","Door keyway",pull(-.065,-.003,.044),.003,.010,.001,SEDAN_BLACK,"x")
+                _pill(name,"carMetal","Front door lock cylinder",pull(-.070,-.001,.027),.014,.018,.006,SEDAN_ALLOY,"x")
+                _pill(name,"plain","Door keyway",pull(-.070,-.001,.031),.003,.009,.001,SEDAN_BLACK,"x")
             molding=[]
-            for t in _range(24):
-                z=blend(lo+.036,hi-.033,t)
-                x,_,_=_side(side,z,.40)
-                molding.append((x+side*.002,.487+sin(pi*t)*.010,z))
-            _cord(name,"plain","Raised bodyside molding",molding,.013,SEDAN_RUBBER)
-            _cord(name,"carMetal","Trim inset",[_add(p,(side*.012,.005,0)) for p in molding],
-                  .0035,SEDAN_CHROME)
+            for t in _range(33):
+                z=blend(lo+(.035 if front else .213),hi-(.173 if front else .031),t)
+                height=.559-.013*z-.006*abs(2*t-1)**8
+                x,y,_=_side_height(side,z,height)
+                molding.append((x+side*.002,y,z))
+            _cord(name,"plain","Flush bodyside rub strip",molding,.009,SEDAN_RUBBER)
+            _cord(name,"carMetal","Trim inset",[_add(p,(side*.008,.004,0)) for p in molding],
+                  .0028,SEDAN_CHROME)
             _side_frame(name,side,front)
             _door_card(name,side,front,lo,hi)
             glass=_sedan_asset("side_glass_"+suffix,pivot,"sedan_door_"+suffix)
             _panel(glass,"carGlass","Curved tinted roll-up glass",25,15,
-                   lambda u,v:_side_glass_point(side,front,u,v),rgb(0x4a6061),flip=side>0)
+                   lambda u,v:_side_glass_point(side,front,u,v),rgb(0x3b5251),flip=side>0)
             if front:
                 _outside_mirror(side,pivot,suffix)
 
@@ -589,15 +666,15 @@ def _outside_mirror(side,pivot,suffix):
     house=_sedan_asset("mirror_housing_"+suffix,pivot,"sedan_door_"+suffix)
     glass=_sedan_asset("mirror_glass_"+suffix,pivot,"sedan_door_"+suffix)
     name="Driver" if side>0 else "Passenger"
-    mount=[(side*.854,.926,.883),(side*.868,1.021,.841),(side*.902,.942,.778)]
-    _cord(house,"plain",name+" sail panel frame",mount,.020,SEDAN_RUBBER,closed=True)
+    mount=[(side*.891,.940,.842),(side*.849,1.010,.806),(side*.917,.949,.735)]
+    _cord(house,"plain",name+" sail panel frame",mount,.011,SEDAN_RUBBER,closed=True)
     mesh(house,"plain",name+" molded sail mounting plate",mount,[(0,1,2)],SEDAN_BLACK,soft=False)
-    _cord(house,"plain",name+" mirror stalk",[(side*.864,.946,.817),(side*.944,.965,.812),(side*.987,.976,.816)],
-          .029,SEDAN_BLACK,sides=12)
+    _cord(house,"plain",name+" mirror stalk",[(side*.897,.951,.790),(side*.952,.973,.778),(side*.992,.985,.771)],
+          .024,SEDAN_BLACK,sides=12)
     outline=_outline([(-.106,-.010),(-.093,.030),(-.034,.052),(.061,.045),(.116,.014),
                       (.111,-.025),(.068,-.047),(-.061,-.045)],4)
     def mirror(u,v,d):
-        return (side*(1.017+u),.982+v+.09*u,.748+d+.16*u)
+        return (side*(1.021+u),.987+v+.09*u,.717+d+.16*u)
     _bezel(house,"carPaint",name+" contoured mirror cap",outline,mirror,
            [(1,-.004),(1,.027),(.91,.059),(.67,.084),(.35,.095)],SEDAN_PAINT,True)
     _bezel(house,"plain",name+" glass mount and dark cavity",outline,mirror,
@@ -614,11 +691,11 @@ def _inside_mirror():
     glass=_sedan_asset("rearview_glass")
     outline=_outline([(-.135,-.022),(-.118,.031),(.114,.031),(.135,-.022),(.109,-.038),(-.108,-.038)],4)
     def view(u,v,d):
-        return (u,1.253+v,.520+d-.15*v)
+        return (u,1.201+v,.390+d-.15*v)
     _bezel(house,"plain","Day/night rearview shell",outline,view,
            [(.87,.029),(1,.013),(1,-.009),(.92,-.012),(.89,-.006)],SEDAN_BLACK,True)
     _bezel(glass,"carMetal","Separate rearview mirror glass",outline,view,
            [(.915,-.013),(.890,-.016)],rgb(0x9aabab),True)
-    _cord(house,"plain","Windscreen mount",[(-.004,1.271,.541),(0,1.306,.558),(0,1.351,.588)],
+    _cord(house,"plain","Windscreen mount",[(-.004,1.220,.417),(0,1.249,.420),(0,1.286,.427)],
           .014,rgb(0x313433),sides=12)
-    box(house,"plain","Anti-glare toggle",(0,1.203,.533),(.051,.028,.020),SEDAN_BLACK,.006)
+    box(house,"plain","Anti-glare toggle",(0,1.154,.406),(.051,.012,.026),SEDAN_BLACK,.006)

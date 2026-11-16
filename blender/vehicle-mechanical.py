@@ -209,6 +209,11 @@ def _engine_and_boot():
     _cord(name,"carMetal","Hood prop rod retained in clip",[(.493,.679,2.135),(.342,.681,2.126),
           (-.345,.681,2.099)],.0046,steel)
 
+    # Fit the complete bay under the lower bonnet, including the radiator carrier.
+    bay=Matrix.Translation(blender_point((0,.029,.056))) @ Matrix.Diagonal((.979,.886,.889,1))
+    for component,*_ in ASSETS[name]["records"]:
+        component.data.transform(bay)
+
     felt=rgb(0x555454)
     _pill(name,"fabric","Full shaped trunk carpet",(0,.343,-1.796),1.402,.912,.053,felt,"y",.37)
     box(name,"fabric","Lined rear seat bulkhead",(0,.586,-1.335),(1.390,.446,.068),felt,.022)
