@@ -110,7 +110,8 @@ def box(name, slot, label, center, size, color, radius=0, yaw=0):
     faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)]
     obj = mesh(name, slot, label, points, faces, color, soft=bool(radius))
     if radius:
-        bevel(obj, radius)
+        segments=1 if radius<.009 else 2
+        bevel(obj,radius,segments if "sedan" in ASSETS[name] else 3)
     return obj
 
 
@@ -491,50 +492,6 @@ def bathroom():
         ((0,.908,-.028),.017,.016),((0,.882,-.019),.016,.015)],rgb(0xb9c7c5),sides=20)
 
 
-def wheel():
-    name=asset("sedan_tire","Parked sedan")
-    profile=[(-.118,.240),(-.117,.271),(-.101,.294),(-.078,.308),(-.059,.318),(-.043,.319),
-             (-.029,.316),(-.020,.319),(.006,.319),(.015,.316),(.026,.319),(.058,.319),
-             (.074,.315),(.093,.304),(.111,.285),(.120,.264),(.120,.240),(.104,.226),(-.103,.226)]
-    n=96
-    rows=[]
-    for row,(x,r) in enumerate(profile):
-        points=[]
-        for j in range(n):
-            a=tau*j/n
-            shoulder=max(0,1-abs(x)/.085)
-            ribs=(.5+.5*cos(a*32+8*x+row*.16))**10
-            rr=r-.0042*ribs*shoulder
-            points.append((x,cos(a)*rr,sin(a)*rr))
-        rows.append(points)
-    rows.append(rows[0])
-    rows_mesh(name,"carTire","Tread, shoulders and molded sidewalls",rows,
-              lambda p:tone(rgb(0x2b2b2b), .91+.11*sin(p[1]*42+p[2]*21)+.10*smooth(.23,.31,sqrt(p[1]**2+p[2]**2))),
-              caps=False)
-    name=asset("sedan_hub","Parked sedan")
-    alloy=rgb(0xaab5ba)
-    lathe(name,"carMetal","Cast aluminum rim",[(.107,.162,.162),(.124,.193,.193),(.137,.199,.199),
-          (.141,.194,.194),(.139,.183,.183),(.119,.176,.176)],alloy,sides=64,axis="x",caps=False)
-    lathe(name,"plain","Brake backing plate",[(.067,.167,.167),(.079,.166,.166)],rgb(0x3d403d),sides=44,axis="x")
-    lathe(name,"carMetal","Wheel hub",[(.091,.072,.072),(.126,.074,.074),(.147,.065,.065),(.151,.052,.052)],
-          rgb(0xc2cac9),sides=36,axis="x")
-    for i in range(5):
-        center=tau*i/5
-        spoke=[]
-        for x,r,wide in [(.136,.048,.41),(.136,.068,.38),(.125,.113,.28),(.122,.156,.22),(.133,.187,.19)]:
-            spoke.append([(x,r*cos(center+wide*k/3),r*sin(center+wide*k/3)) for k in range(-3,4)])
-        face=rows_mesh(name,"carMetal","Sculpted alloy spoke",spoke,alloy,caps=False,ring=False)
-        solid=face.modifiers.new("Cast spoke thickness","SOLIDIFY")
-        solid.thickness=.026
-        apply(face,solid)
-        bevel(face,.004)
-    for i in range(4):
-        t=tau*i/4
-        xy=(0,.047*cos(t),.047*sin(t))
-        lathe(name,"plain","Recessed lug",[(.145,.010,.010),(.151,.010,.010)],rgb(0x4f5551),sides=12,axis="x",center=xy)
-        lathe(name,"carMetal","Lug nut",[(.150,.0058,.0058),(.155,.0055,.0055)],rgb(0xc6c8be),sides=6,axis="x",center=xy)
-
-
 def crate():
     width, depth, height, board = .92, .65, .60, .012
     name=asset("supply_carton","Range supply")
@@ -863,6 +820,8 @@ def export_models():
                 obj["joints"]=encode("H",data["joints"])
             exported.append(obj)
         definition={"parts":exported}
+        if "anchors" in group:
+            definition["anchors"]=group["anchors"]
         if skin is not None:
             definition["jointCount"]=skin["count"]
         if "bones" in group:
@@ -920,7 +879,6 @@ def main():
     lodging_details()
     kitchen()
     bathroom()
-    wheel()
     crate()
     duffel()
     run_recipe("camp-assets.py","build_camp_details")

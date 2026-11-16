@@ -62,3 +62,25 @@ test('finger flexion keeps its proximal and middle joint anchors in place', () =
   assert.ok(Math.hypot(...Valley.minus(middle, pivots[0])) < 2e-7);
   assert.ok(flexed.subarray(32).some((value, index) => Math.abs(value - rest[32+index]) > .04));
 });
+
+test('Sonata lenses keep their front amber corner and separate red rear sections', () => {
+  for (const side of ['left','right']) {
+    const front = assets.get('sedan_lamp_front_' + side).parts.find(part => part.slot === 'carLens').shape.vertices;
+    const rear = assets.get('sedan_lamp_rear_' + side).parts.find(part => part.slot === 'carLens').shape.vertices;
+    let clear = 0, amber = 0, upper = 0, red = 0;
+    for (let i = 0; i < front.length; i += 11) {
+      const [r,g,b] = front.subarray(i+8,i+11);
+      if (r > .49 && b > .56) clear++;
+      if (r > .55 && g > .44 && b < .27) amber++;
+    }
+    for (let i = 0; i < rear.length; i += 11) {
+      const x = Math.abs(rear[i]);
+      if (x < .637 || x > .817 || rear[i+1] < .66 || rear[i+1] > .78) continue;
+      upper++;
+      const [r,g,b] = rear.subarray(i+8,i+11);
+      if (r > .53 && g < .28 && b < .28) red++;
+    }
+    assert.ok(clear > 100 && amber > 50, side);
+    assert.ok(upper > 100 && red/upper > .87, side);
+  }
+});

@@ -1,0 +1,228 @@
+"""Rotating assemblies, positive tire markings and visible engine-bay hardware."""
+
+
+def _wheel_models():
+    tire=_sedan_asset("tire")
+    sections=[(-.106,.195),(-.121,.231),(-.117,.266),(-.105,.293),(-.088,.310),
+              (-.072,.317),(-.062,.314),(-.054,.319),(-.034,.319),(-.026,.314),
+              (-.018,.319),(.009,.319),(.019,.314),(.026,.319),(.049,.319),
+              (.058,.314),(.067,.319),(.082,.315),(.099,.301),(.115,.284),
+              (.127,.267),(.133,.245),(.129,.221),(.119,.200),(.108,.191),(-.103,.191)]
+    count=144
+    shape=[]
+    for x,r in sections:
+        tread=1-smooth(.077,.109,abs(x))
+        points=[]
+        for i in range(count):
+            a=tau*i/count
+            s=abs(x)/.10
+            ribs=(.5+.5*cos(a*42+5.4*s-2.1*s*s))**9
+            radius=r-.0042*ribs*tread
+            points.append((x,cos(a)*radius,sin(a)*radius))
+        shape.append(points)
+    def rubber(p):
+        x,y,z=p
+        a=atan2(z,y)
+        r=sqrt(y*y+z*z)
+        tread=(.5+.5*cos(a*42+abs(x)*47))**11
+        stain=.97+.072*sin(a*47)+.067*smooth(.269,.319,r)-.22*tread*(1-smooth(.082,.107,abs(x)))
+        return tone(rgb(0x262727),stain)
+    rows_mesh(tire,"carTire","Molded directional tread and curved sidewalls",shape+[shape[0]],rubber,caps=False,
+              uv=lambda p:(atan2(p[2],p[1])/(tau)+.50,p[0]*4+.5))
+    for x,r,w in ((.126,.227,.0010),(.128,.275,.0011),(.115,.287,.0008)):
+        _cord(tire,"carTire","Fine sidewall molding band",[(x,r*cos(a),r*sin(a)) for a in
+              (i*tau/66 for i in range(66))],w,rgb(0x2e3030),closed=True,sides=4)
+    for text,a,r,size,step,reverse in (
+        ("SOLUS KH16",0,.263,.027,.088,False),("KUMHO",pi,.277,.028,.142,True),
+        ("P205/65R15",1.53,.223,.012,.057,False),("RADIAL TUBELESS",-1.66,.221,.008,.042,False)
+    ):
+        s=-1 if reverse else 1
+        for i,glyph in enumerate(text):
+            if glyph==" ":
+                continue
+            angle=a+s*((len(text)-1)/2-i)*step
+            ca,sa=cos(angle),sin(angle)
+            x=.132 if r>.24 else .130
+            _letter(tire,"carTire",glyph,(x,r*ca,r*sa),size,rgb(0x27292a),
+                    right=(0,s*sa,-s*ca),up=(0,s*ca,s*sa),rise=.00055)
+
+    wheel=_sedan_asset("hub")
+    alloy=rgb(0xbec2bc)
+    lathe(wheel,"carMetal","Polished rolled rim lip",
+          [(.105,.179,.179),(.115,.200,.200),(.126,.205,.205),(.135,.205,.205),(.142,.200,.200),
+           (.145,.193,.193),(.141,.186,.186),(.123,.183,.183),(.106,.185,.185)],
+          SEDAN_ALLOY,sides=88,axis="x",caps=False)
+    lathe(wheel,"plain","Wheel barrel",[(.035,.178,.178),(.119,.183,.183)],rgb(0x454743),64,axis="x",caps=False)
+    lathe(wheel,"carMetal","Visible brake rotor",[(.060,.138,.138),(.070,.141,.141),(.076,.135,.135)],
+          rgb(0x737570),48,axis="x")
+    _pill(wheel,"plain","Cast brake caliper",(.089,.090,-.079),.109,.049,.051,rgb(0x625c4d),"x",.58)
+
+    # The photo shows seven flowing spokes around a four-lug hub.
+    for i in range(7):
+        angle=tau*i/7
+        rings=[]
+        for x,r,width,sweep in ((.146,.039,.447,0),(.147,.065,.442,.014),(.146,.088,.364,.032),
+                                (.136,.120,.283,.041),(.129,.152,.233,.044),(.128,.171,.231,.033),
+                                (.136,.192,.270,.018),(.139,.199,.286,.005)):
+            ring=[]
+            for t in _range(8):
+                phi=angle+(2*t-1)*width+sweep
+                ring.append((x-.014*abs(2*t-1)**2.4,r*cos(phi),r*sin(phi)))
+            rings.append(ring)
+        spoke=rows_mesh(wheel,"carMetal","Sculpted alloy spoke",rings,alloy,ring=False,caps=False)
+        thick=spoke.modifiers.new("Cast thickness","SOLIDIFY")
+        thick.thickness=.009
+        apply(spoke,thick)
+        bevel(spoke,.003,2)
+
+    lathe(wheel,"carMetal","Sculpted four-lug center",
+          [(.124,.080,.080),(.143,.079,.079),(.151,.065,.065),(.151,.030,.030)],alloy,54,axis="x")
+    lathe(wheel,"plain","Black pressed center cap",[(.150,.024,.024),(.153,.024,.024),(.156,.022,.022)],
+          rgb(0x404241),30,axis="x")
+    for i in range(4):
+        a=tau*(i+.055)/4
+        where=(0,.047*cos(a),.047*sin(a))
+        lathe(wheel,"plain","Lug counterbore",[(.149,.011,.011),(.153,.012,.012),(.154,.010,.010)],
+              rgb(0x454742),16,where,"x")
+        lathe(wheel,"carMetal","Hex wheel nut",[(.154,.007,.007),(.158,.0065,.0065),(.163,.0045,.0045)],
+              rgb(0xaeb0a5),6,where,"x")
+    valve=(.138,-.163,.047)
+    _cord(wheel,"plain","Rubber tire valve stem",[valve,(.151,-.155,.048),( .165,-.149,.041)],.005,SEDAN_RUBBER)
+    _pill(wheel,"carMetal","Valve tip",(.165,-.149,.041),.007,.008,.008,rgb(0x6d7068),"x")
+
+
+def _engine_and_boot():
+    name=_sedan_asset("engine_and_boot")
+    black=rgb(0x292e2d)
+    steel=rgb(0x767b76)
+    aluminum=rgb(0xa9aaa0)
+    yellow=rgb(0xd5ba40)
+    gray=rgb(0x414543)
+    _pill(name,"plain","Pressed engine compartment floor",(0,.327,1.676),1.443,1.147,.089,black,"y",.40)
+    box(name,"gloss","Insulated firewall",(0,.647,1.076),(1.497,.395,.062),rgb(0x454943),.016)
+    box(name,"carMetal","Radiator upper carrier",(0,.621,2.125),(1.494,.065,.128),steel,.019)
+    box(name,"plain","Radiator assembly",(0,.508,2.155),(1.095,.190,.103),black,.020)
+    for i in range(25):
+        x=(i-12)*.040
+        box(name,"carMetal","Radiator cooling fin",(x,.531,2.214),(.010,.146,.009),rgb(0x767a72),.001)
+    for side in (-1,1):
+        x=side*.668
+        _pill(name,"carMetal","Rolled fender flange",(x,.745,1.611),.124,1.035,.076,steel,"y")
+        lathe(name,"carMetal","Stamped strut tower",[(.000,.149,.149),(.034,.149,.149),(.082,.107,.107),(.091,.086,.086)],
+              steel,34,(side*.595,.689,1.486))
+        lathe(name,"plain","Suspension top hat",[(0,.075,.075),(.016,.068,.068),(.041,.046,.046)],
+              black,24,(side*.595,.769,1.486))
+        for i in range(3):
+            a=i*tau/3+.27
+            lathe(name,"carMetal","Strut mounting nut",[(0,.011,.011),(.016,.010,.010)],
+                  aluminum,6,(side*.595+.092*cos(a),.767,1.486+.092*sin(a)))
+        _cord(name,"plain","Engine bay weather strip",[(side*.720,.759,1.11),(side*.742,.769,1.612),
+              (side*.685,.706,2.069)],.010,SEDAN_RUBBER)
+
+    box(name,"carMetal","Transverse DOHC block",(.128,.577,1.627),(.717,.352,.572),steel,.051)
+    case(name,"plain","Sculpted transverse rocker cover",[(.713,.651,.439,.050,1.636),
+         (.764,.655,.428,.052,1.620),(.798,.603,.392,.053,1.616),(.823,.575,.377,.056,1.611)],black)
+    cover=_outline([(-.313,-.036),(-.264,-.088),(.215,-.088),(.321,-.055),(.317,.073),(-.283,.077)],3)
+    _bezel(name,"carMetal","Bright 16-valve cover casting",cover,
+           lambda u,v,d:(.122+u,.775+d-.16*v,1.830+v),
+           [(1,-.022),(1,.001),(.94,.014)],aluminum,True)
+    _letter(name,"carMetal","DOHC 16 VALVE",(.12,.791,1.858),.052,rgb(0x77796d),
+            up=(0,0,-1),rise=.0012)
+    _badge(name,(.247,.827,1.572),.123,"y",rgb(0x83877d))
+    for i in range(5):
+        z=1.558+i*.032
+        _cord(name,"plain","Valve cover ribs",[(.026,.825,z),(-.047,.826,z),(-.144,.823,z+.011)],.0043,gray)
+    for x,z in ((-.134,1.686),(.310,1.676),(-.144,1.522),(.280,1.503)):
+        lathe(name,"carMetal","Valve cover retaining nut",[(0,.010,.010),(.011,.009,.009)],aluminum,6,(x,.807,z))
+    oil=(.317,.824,1.479)
+    lathe(name,"plain","Oil filler cap",[(0,.047,.047),(.009,.051,.051),(.021,.049,.049),(.027,.044,.044)],
+          black,24,oil)
+    for i in range(10):
+        a=i*tau/10
+        at=(oil[0]+.048*cos(a),.841,oil[2]+.048*sin(a))
+        box(name,"plain","Cross-hatched cap grips",at,(.012,.012,.010),gray,.002,-a)
+    _letter(name,"gloss","ENGINE OIL",(.318,.851,1.478),.008,rgb(0x79786a),up=(0,0,-1),rise=.00014)
+
+    heat=_outline([(-.245,-.046),(-.220,-.101),(.209,-.103),(.246,-.047),(.211,.077),(.133,.118),
+                   (-.155,.120),(-.225,.047)],4)
+    def shield(u,v,d):
+        return (.127+u,.665-.48*v+d,1.969+v)
+    _bezel(name,"carMetal","Pressed exhaust heat shield",heat,shield,
+           [(1,-.014),(1,.006),(.91,.046),(.75,.057)],rgb(0x9c9f94),True)
+    for z in (.026,.056,.089):
+        _cord(name,"carMetal","Heat shield pressed ridge", [shield(lerp_u,z+.008*(lerp_u/.18)**2,.048)
+              for lerp_u in (-.163,-.103,0,.103,.163)],.005,rgb(0x8e9488))
+    _letter(name,"gloss","HOT",(.127,.727,1.924),.036,rgb(0x777e77),up=(0,0,-1),rise=.00036)
+    _cord(name,"gloss","Yellow oil dipstick grip",catmull([(.422,.696,1.920),(.412,.719,1.954),
+          (.435,.719,1.967),(.445,.705,1.933)],4),.0045,yellow,closed=True)
+    for x in (-.05,.306):
+        lathe(name,"carMetal","Heat shield screw",[(0,.009,.009),(.009,.008,.008)],steel,6,(x,.713,1.944))
+
+    box(name,"carMetal","Cast intake plenum",(.087,.720,1.260),(.550,.141,.147),rgb(0x868c85),.043)
+    for i in range(4):
+        x=.291-i*.138
+        _cord(name,"carMetal","Rounded intake runner",catmull([(x,.728,1.244),(x,.709,1.348),
+              (x,.666,1.369),(x,.630,1.467)],4),.030,rgb(0x878b80),sides=10)
+    box(name,"plain","Air cleaner lower case",(-.426,.649,1.513),(.294,.205,.350),black,.023)
+    box(name,"plain","Air cleaner cover",(-.426,.764,1.510),(.308,.044,.352),black,.015)
+    for i in range(8):
+        x=-.551+i*.035
+        _cord(name,"gloss","Air box molding fins",[(x,.780,1.372),(x,.793,1.420),(x,.791,1.658)],.004,gray)
+    air=catmull([(-.403,.779,1.399),(-.340,.798,1.290),(-.220,.803,1.230),(-.167,.793,1.253)],6)
+    _cord(name,"plain","Rubber air intake elbow",air,.054,SEDAN_RUBBER,sides=15)
+    for i in range(1,len(air)-1):
+        p=air[i]
+        tangent=(Vector(air[i+1])-Vector(air[i-1])).normalized()
+        along=tangent.cross(Vector((0,1,0))).normalized()
+        up=tangent.cross(along)
+        width=.060 if i not in (1,len(air)-2) else .062
+        loop=[tuple(Vector(p)+width*(along*cos(a)+up*sin(a))) for a in (j*tau/16 for j in range(16))]
+        _cord(name,"carMetal" if i in (1,len(air)-2) else "plain","Intake elbow ring",loop,.0036,
+              SEDAN_ALLOY if i in (1,len(air)-2) else gray,closed=True,sides=4)
+
+    box(name,"plain","Battery box sidewall",(-.447,.604,1.864),(.311,.239,.316),rgb(0x60635b),.022)
+    box(name,"plain","Battery black lid",(-.447,.739,1.864),(.320,.061,.326),black,.017)
+    _cord(name,"gloss","Yellow battery handle",catmull([(-.517,.767,1.905),(-.518,.783,1.825),
+          (-.399,.783,1.825),(-.393,.767,1.905)],3),.010,yellow,sides=7)
+    for x,col in ((-.535,rgb(0x907669)),(-.363,rgb(0x9a4b37))):
+        lathe(name,"carMetal","Battery terminal and clamp",[(0,.017,.017),(.018,.015,.015),(.022,.010,.010)],
+              col,12,(x,.760,1.958))
+        _cord(name,"plain","Battery circuit protection cable",catmull([(x,.775,1.959),(x-.064,.749,2.048),
+              (x-.117,.700,2.084)],5),.008,SEDAN_RUBBER)
+    box(name,"plain","Fuse and relay cover",(-.630,.690,1.625),(.162,.149,.198),rgb(0x414442),.018)
+    _letter(name,"gloss","FUSE  RELAY",(-.630,.767,1.622),.012,rgb(0x75796a),up=(0,0,-1),rise=.00018)
+    for x,z,w,col in ((.606,1.923,.128,rgb(0x368694)),(.582,1.752,.143,rgb(0x696f5d)),
+                      (-.537,1.189,.107,rgb(0x313830))):
+        _pill(name,"gloss","Molded fluid reservoir",(x,.655,z),w,.116,.166,rgb(0xbfc2a1),"y",.68)
+        lathe(name,"plain","Fluted fluid reservoir lid",[(0,.032,.032),(.010,.036,.036),(.023,.031,.031)],
+              col,20,(x,.733,z))
+    _cord(name,"plain","Upper radiator hose",catmull([(-.228,.692,1.812),(-.179,.661,1.967),
+          (-.135,.643,2.053),(.012,.638,2.110)],4),.022,SEDAN_RUBBER,sides=12)
+    for i in range(5):
+        _cord(name,"plain","Wrapped control harness",catmull([( .431-i*.013,.768,1.448),
+              (.493-i*.012,.797,1.289),(.412-i*.007,.789,1.133),(.235-i*.026,.798,1.109)],3),
+              .005,SEDAN_RUBBER)
+    lathe(name,"carMetal","Pressure filler cap",[(0,.033,.033),(.012,.032,.032)],aluminum,24,(-.224,.660,2.137))
+    _pill(name,"gloss","Yellow pressure cap warning",(-.224,.674,2.137),.054,.045,.004,yellow,"y",.84)
+    box(name,"gloss","Cooling safety sticker",(.296,.659,2.134),(.106,.002,.041),yellow,.001)
+    _letter(name,"plain","CAUTION",(.296,.661,2.132),.010,rgb(0x403c27),up=(0,0,-1),rise=.00010)
+    _cord(name,"carMetal","Hood prop rod retained in clip",[(.493,.679,2.135),(.342,.681,2.126),
+          (-.345,.681,2.099)],.0046,steel)
+
+    felt=rgb(0x555454)
+    _pill(name,"fabric","Full shaped trunk carpet",(0,.343,-1.796),1.402,.912,.053,felt,"y",.37)
+    box(name,"fabric","Lined rear seat bulkhead",(0,.586,-1.335),(1.390,.446,.068),felt,.022)
+    for side in (-1,1):
+        _pill(name,"fabric","Trunk liner over wheel housing",(side*.608,.490,-1.677),.271,.437,.266,
+              felt,"y",.46)
+        _pill(name,"fabric","Molded trunk liner side wall",(side*.679,.549,-1.770),.840,.385,.085,felt,"x",.41)
+    box(name,"fabric","Rear wall trunk trim",(0,.486,-2.213),(1.369,.265,.089),felt,.020)
+    _pill(name,"plain","Ribbed trunk threshold",(0,.658,-2.252),1.196,.090,.041,rgb(0x545855),"y",.37)
+    for i in range(44):
+        x=(i-21.5)*.024
+        _cord(name,"gloss","Sill molding small groove",[(x,.681,-2.225),(x,.681,-2.265)],.0014,rgb(0x777a75))
+    _pill(name,"carMetal","Trunk latch plate",(0,.683,-2.220),.103,.052,.018,steel,"y")
+    _cord(name,"carMetal","Trunk latch loop",[(-.025,.683,-2.224),(-.025,.712,-2.224),
+          (.025,.712,-2.224),(.025,.683,-2.224)],.0065,SEDAN_ALLOY)
+    _pill(name,"plain","Carpet spare cover pull",(0,.375,-1.991),.130,.030,.012,rgb(0x383a39),"y")
+    _pill(name,"carLens","Luggage compartment lamp",(.438,.763,-1.366),.092,.046,.016,rgb(0xb3ab86))

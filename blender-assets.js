@@ -19,7 +19,7 @@
       joints:joints ? decode(joints,Uint16Array) : null,
       weights:weights ? decode(weights,Float32Array) : null
     }));
-    const model={parts,pivots:definition.pivots,jointCount:definition.jointCount??3};
+    const model={parts,pivots:definition.pivots,anchors:definition.anchors,jointCount:definition.jointCount??3};
     decoded.set(name,model);
     return model;
   }

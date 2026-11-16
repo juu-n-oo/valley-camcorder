@@ -234,12 +234,12 @@
     const parking=flat(park.x,park.z,4.29,4.88,carPark.y-.037,2.5,parkYaw);
     clearances.push(parking);
     const parkedCars=[];
-    for(const [station,color,reverse] of [[9,0x21272b,false],[50,0xe4e2d7,true],[122,0x878d90,false]]) {
+    for(const [station,color,reverse] of [[9,0x141719,false],[50,0xe9e8df,true],[122,0x8b9297,false]]) {
       const q=main.at(station), spot=offset(q,-3.68), yaw=Math.atan2(-q.nz,q.nx);
       clearances.push(flat(spot.x,spot.z,1.55,2.80,q.y-.045,1.7,yaw));
       parkedCars.push({x:spot.x,z:spot.z,yaw:yaw+(reverse ? Math.PI : 0),color});
     }
-    for(const [lane,color] of [[-1.60,0x878d90],[1.60,0x21272b]]) {
+    for(const [lane,color] of [[-1.60,0x8b9297],[1.60,0x141719]]) {
       parkedCars.push({x:park.x+parking.s*lane,z:park.z+parking.c*lane,yaw:parkYaw+Math.PI/2,color,lot:true});
     }
 
