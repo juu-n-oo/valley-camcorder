@@ -91,7 +91,7 @@ test('Sonata lenses keep their front amber corner and separate red rear sections
         if (isClear || isAmber) misplaced++;
       }
       const width=(Math.abs(rear[i])-inner)/(outer-inner);
-      if (height > .05 && height < .23 && width > .10 && width < .86) {
+      if (height > .068 && height < .23 && width > .10 && width < .86) {
         if (isClear) reverse++;
         if (isAmber) indicator++;
         if (isRed) misplaced++;
@@ -118,17 +118,20 @@ function covers({vertices,indices}, axes, point, minimumDepth) {
   return false;
 }
 
-test('Sonata grille, fog lamps and cast wheel have modeled openings', () => {
+test('Sonata grille, fog lamps, front wings and cast wheels have modeled openings', () => {
   const shell=assets.get('sedan_body_shell').parts;
   const body=shell.find(part=>part.slot==='carPaint').shape;
   for (const sample of [[.11,.628],[0,.322],[-.596,.331],[.596,.331]]) {
     assert.equal(covers(body,[0,1,2],sample,1.93),false,sample.join(', '));
   }
   assert.ok(covers(body,[0,1,2],[.404,.463],1.93));
+  assert.equal(covers(body,[2,1,0],[1.909,.695],.869),false);
+  assert.ok(covers(body,[2,1,0],[1.909,.746],.869));
   const duct=shell.find(part=>part.slot==='plain').shape;
   assert.equal(covers(duct,[0,1,2],[.078,.644],2.12),false);
   const wheel=assets.get('sedan_hub').parts.find(part=>part.slot==='carMetal').shape;
-  const angle=Math.PI/7+.095;
+  const angle=-.099;
+  const spoke=angle+Math.PI/7;
   assert.equal(covers(wheel,[1,2,0],[.158*Math.cos(angle),.158*Math.sin(angle)],.137),false);
-  assert.ok(covers(wheel,[1,2,0],[.155*Math.cos(.095),.155*Math.sin(.095)],.137));
+  assert.ok(covers(wheel,[1,2,0],[.155*Math.cos(spoke),.155*Math.sin(spoke)],.137));
 });

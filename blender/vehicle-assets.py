@@ -7,8 +7,8 @@ def _linear(value):
     return value/12.92 if value<=.04045 else ((value+.055)/1.055)**2.4
 
 
-def _finish(slot,paint=None):
-    title="Sonata | "+(paint or slot)
+def _finish(slot,paint=None,optic=None,override=None):
+    title="Sonata | "+(paint or override or (optic+" optical cover" if optic else slot))
     if title in bpy.data.materials:
         return bpy.data.materials[title]
     mat=bpy.data.materials.new(title)
@@ -27,7 +27,14 @@ def _finish(slot,paint=None):
     principled.inputs["Roughness"].default_value=rough
     principled.inputs["Metallic"].default_value=metallic
     if slot=="carLens":
-        principled.inputs["Specular IOR Level"].default_value=.28
+        principled.inputs["Specular IOR Level"].default_value=.43
+    if override=="Grille plastic":
+        principled.inputs["Roughness"].default_value=.42
+        principled.inputs["Specular IOR Level"].default_value=.13
+    elif override in ("Red reflector","Amber reflector"):
+        principled.inputs["Roughness"].default_value=.24
+        principled.inputs["Metallic"].default_value=.36 if override=="Red reflector" else .49
+        principled.inputs["Coat Weight"].default_value=.44
     if slot in ("carPaint","carWood","carLens","carGlass"):
         principled.inputs["Coat Weight"].default_value=.92 if slot=="carPaint" else .35
         principled.inputs["Coat Roughness"].default_value=.067 if slot=="carPaint" else .13
@@ -57,6 +64,31 @@ def _finish(slot,paint=None):
         links.new(mix.outputs[0],output.inputs["Surface"])
         mat.surface_render_method='DITHERED'
         mat.diffuse_color=(.10,.17,.17,.48)
+    if optic:
+        # The molded cover passes light to the shaped reflector underneath.
+        # Fresnel reflection leaves the perimeter and convex shoulder readable.
+        transmission={
+            "Clear":(.94,.975,.994,1),"Amber":(1,.67,.126,1),"Red":(1,.23,.146,1),
+        }[optic]
+        clear=nodes.new("ShaderNodeBsdfTransparent")
+        clear.inputs["Color"].default_value=transmission
+        principled.inputs["Roughness"].default_value=.074 if optic=="Clear" else .093
+        principled.inputs["Metallic"].default_value=0
+        principled.inputs["Coat Weight"].default_value=.70
+        principled.inputs["Coat Roughness"].default_value=.069
+        fresnel=nodes.new("ShaderNodeFresnel")
+        fresnel.inputs["IOR"].default_value=1.49
+        reflect=nodes.new("ShaderNodeMath")
+        reflect.operation="MULTIPLY_ADD"
+        reflect.inputs[1].default_value=.86
+        reflect.inputs[2].default_value=.095 if optic=="Clear" else .155
+        links.new(fresnel.outputs[0],reflect.inputs[0])
+        mix=nodes.new("ShaderNodeMixShader")
+        links.new(reflect.outputs[0],mix.inputs[0])
+        links.new(clear.outputs[0],mix.inputs[1])
+        links.new(principled.outputs[0],mix.inputs[2])
+        links.new(mix.outputs[0],output.inputs["Surface"])
+        mat.surface_render_method='DITHERED'
     if slot in ("carPaint","carWood","carLeather","carTire","fabric","carLens"):
         coord=nodes.new("ShaderNodeTexCoord")
         noise=nodes.new("ShaderNodeTexNoise")
@@ -91,7 +123,7 @@ def _finish(slot,paint=None):
             links.new(tint.outputs[0],principled.inputs["Base Color"])
         bump=nodes.new("ShaderNodeBump")
         bump.inputs["Strength"].default_value={"carPaint":.08,"carWood":.11,"carLens":.10}.get(slot,.22)
-        bump.inputs["Distance"].default_value=.0012 if slot in ("fabric","carLeather","carTire") else .00035
+        bump.inputs["Distance"].default_value=.0012 if slot in ("fabric","carLeather") else .00035
         links.new(noise.outputs["Fac"],bump.inputs["Height"])
         links.new(bump.outputs["Normal"],principled.inputs["Normal"])
     return mat
@@ -128,7 +160,8 @@ def _finalize_parts():
                 c=paint(game_point(v.co)) if callable(paint) else paint
                 colors.extend((*map(_linear,c),1))
             attribute.data.foreach_set("color",colors)
-            obj.data.materials[0]=_finish(slot)
+            obj.data.materials[0]=_finish(slot,optic=obj.get("optical_cover"),
+                                         override=obj.get("finish_override"))
             if not callable(paint):
                 obj.color=(*map(_linear,paint),1)
             if any(at):
@@ -215,7 +248,7 @@ def _assemble():
 
 
 def build_vehicles():
-    for file in ("vehicle-exterior.py","vehicle-cabin.py","vehicle-mechanical.py"):
+    for file in ("vehicle-exterior.py","vehicle-cabin.py","vehicle-tire-lettering.py","vehicle-mechanical.py"):
         source=ROOT/"blender"/file
         exec(compile(source.read_text(encoding="utf-8"),str(source),"exec"),globals())
     _body_shell()

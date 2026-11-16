@@ -3,48 +3,59 @@
 
 def _wheel_models():
     tire=_sedan_asset("tire")
+    outer_sidewall=[(.099,.301),(.115,.284),(.127,.267),(.133,.245),
+                    (.129,.221),(.119,.200),(.108,.191)]
     sections=[(-.106,.195),(-.121,.231),(-.117,.266),(-.105,.293),(-.088,.310),
               (-.072,.317),(-.062,.314),(-.054,.319),(-.034,.319),(-.026,.314),
               (-.018,.319),(.009,.319),(.019,.314),(.026,.319),(.049,.319),
-              (.058,.314),(.067,.319),(.082,.315),(.099,.301),(.115,.284),
-              (.127,.267),(.133,.245),(.129,.221),(.119,.200),(.108,.191),(-.103,.191)]
-    count=144
+              (.058,.314),(.067,.319),(.082,.315),*outer_sidewall,(-.103,.191)]
+    count=61*8
     shape=[]
     for x,r in sections:
-        tread=1-smooth(.077,.109,abs(x))
+        tread=1-smooth(.102,.116,abs(x))
         points=[]
         for i in range(count):
             a=tau*i/count
-            s=abs(x)/.10
-            ribs=(.5+.5*cos(a*42+5.4*s-2.1*s*s))**9
-            radius=r-.0017*ribs*tread
+            s=min(1.15,abs(x)/.104)
+            phase=a*61+5.1*s-3.7*s*s+.82*sin(pi*s)
+            channel=(.5+.5*cos(phase))**5
+            sipe=(.5+.5*cos(phase+pi+.42*s))**9
+            radius=r-tread*(.0038*channel+.00125*sipe)
             points.append((x,cos(a)*radius,sin(a)*radius))
         shape.append(points)
+
+    shoulder=tuple((r,x) for x,r in reversed(outer_sidewall))
+    def sidewall(r):
+        for (r0,x0),(r1,x1) in zip(shoulder,shoulder[1:]):
+            if r <= r1:
+                return blend(x0,x1,max(0,(r-r0)/(r1-r0)))
+        return shoulder[-1][1]
+
     def rubber(p):
         x,y,z=p
         a=atan2(z,y)
         r=sqrt(y*y+z*z)
-        tread=(.5+.5*cos(a*42+abs(x)*47))**11
-        stain=.97+.072*sin(a*47)+.067*smooth(.269,.319,r)-.22*tread*(1-smooth(.082,.107,abs(x)))
+        s=min(1.15,abs(x)/.104)
+        tread=(.5+.5*cos(a*61+5.1*s-3.7*s*s+.82*sin(pi*s)))**5
+        stain=.96+.045*sin(a*47)+.09*smooth(.270,.319,r)-.30*tread*(1-smooth(.102,.116,abs(x)))
         return tone(rgb(0x222323),stain)
     rows_mesh(tire,"carTire","Molded directional tread and curved sidewalls",shape+[shape[0]],rubber,caps=False,
               uv=lambda p:(atan2(p[2],p[1])/(tau)+.50,p[0]*4+.5))
-    for x,r,w in ((.126,.227,.0010),(.128,.275,.0011),(.115,.287,.0008)):
-        _cord(tire,"carTire","Fine sidewall molding band",[(x,r*cos(a),r*sin(a)) for a in
-              (i*tau/66 for i in range(66))],w,rgb(0x2e3030),closed=True,sides=4)
-    for text,a,r,size,step,reverse in (
-        ("SOLUS KH16",0,.263,.027,.088,False),("KUMHO",pi,.277,.028,.142,True),
-        ("P205/65R15",1.53,.223,.012,.057,False),("RADIAL TUBELESS",-1.66,.221,.008,.042,False)
+    for r,w in ((.237,.00066),(.291,.00084),(.294,.00053)):
+        _cord(tire,"carTire","Fine sidewall mold line",[(sidewall(r),r*cos(a),r*sin(a)) for a in
+              (i*tau/108 for i in range(108))],w,rgb(0x2e3030),closed=True,sides=4)
+    _tire_lettering(tire,sidewall)
+    for text,a,r,size,step in (
+        ("KH16  P205/65R15",1.43,.226,.011,.058),
+        ("RADIAL TUBELESS",-1.57,.225,.007,.046),
     ):
-        s=-1 if reverse else 1
         for i,glyph in enumerate(text):
             if glyph==" ":
                 continue
-            angle=a+s*((len(text)-1)/2-i)*step
+            angle=a+((len(text)-1)/2-i)*step
             ca,sa=cos(angle),sin(angle)
-            x=.132 if r>.24 else .130
-            _letter(tire,"carTire",glyph,(x,r*ca,r*sa),size,rgb(0x27292a),
-                    right=(0,s*sa,-s*ca),up=(0,s*ca,s*sa),rise=.00055)
+            _letter(tire,"carTire",glyph,(sidewall(r)+.0005,r*ca,r*sa),size,rgb(0x292a29),
+                    right=(0,sa,-ca),up=(0,ca,sa),rise=.00055)
 
     wheel=_sedan_asset("hub")
     alloy=rgb(0xbec2bc)
@@ -59,15 +70,15 @@ def _wheel_models():
 
     # The seven openings and the four counterbores belong to one cast wheel face.
     windows=[]
-    window_shape=_outline([(.102,0),(.109,-.012),(.129,-.030),(.154,-.045),(.173,-.044),
-                           (.182,-.029),(.186,0),(.182,.029),(.173,.044),(.154,.045),
-                           (.129,.030),(.109,.012)],4)
+    window_shape=_outline([(.108,0),(.113,-.013),(.132,-.030),(.157,-.044),(.176,-.048),
+                           (.184,-.035),(.188,-.015),(.187,.017),(.180,.039),(.169,.046),
+                           (.147,.039),(.126,.026),(.112,.010)],4)
     for i in range(7):
-        angle=tau*(i+.50)/7+.095
+        angle=tau*i/7-.099
         c,s=cos(angle),sin(angle)
         window=[(c*r-s*t,s*r+c*t) for r,t in window_shape]
         windows.append((window,(c*.158,s*.158)))
-    bolt_circle=[(.052*cos(tau*(i+.09)/4),.052*sin(tau*(i+.09)/4)) for i in range(4)]
+    bolt_circle=[(.054*cos(tau*i/4+.344),.054*sin(tau*i/4+.344)) for i in range(4)]
     counterbore=_elliptic(.031,.031,1,32)
     outer=_elliptic(.389,.389,1,112)
     bores=[_offset_outline(counterbore,center) for center in bolt_circle]
@@ -76,7 +87,7 @@ def _wheel_models():
 
     def face(y,z,inset=0):
         r=sqrt(y*y+z*z)
-        x=.144+.011*(1-(r/.195)**1.25)+.0028*exp(-((r-.105)/.038)**2)
+        x=.143+.009*(1-(r/.195)**1.25)+.0044*exp(-((r-.120)/.042)**2)
         return x+inset,y,z
 
     _perforated_surface(wheel,"carMetal","Continuous cast seven-spoke wheel face",outer,
@@ -102,9 +113,11 @@ def _wheel_models():
               rgb(0x302f29),24,where,"x")
         lathe(wheel,"carMetal","Recessed hex wheel nut",[(.128,.008,.008),(.143,.0075,.0075),(.147,.0055,.0055)],
               rgb(0xb9b4a5),6,where,"x")
-    valve=(.138,-.163,.047)
-    _cord(wheel,"plain","Rubber tire valve stem",[valve,(.151,-.155,.048),( .165,-.149,.041)],.005,SEDAN_RUBBER)
-    _pill(wheel,"carMetal","Valve tip",(.165,-.149,.041),.007,.008,.008,rgb(0x6d7068),"x")
+    _cord(wheel,"plain","Rubber tire valve stem",[(.138,-.162,-.095),(.151,-.158,-.090),
+          (.165,-.150,-.084)],.0048,SEDAN_RUBBER)
+    _pill(wheel,"carMetal","Valve tip",(.165,-.150,-.084),.007,.008,.008,rgb(0x6d7068),"x")
+    _pill(wheel,"carMetal","Clip-on wheel balance weight",(.136,.156,.117),.012,.015,.022,
+          rgb(0x82847a),"x",.47)
 
 
 def _engine_and_boot():
