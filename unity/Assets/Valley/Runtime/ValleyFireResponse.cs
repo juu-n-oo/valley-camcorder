@@ -19,14 +19,14 @@ namespace ValleyCamcorder
             public float started;
             public Site site;
             public readonly List<GameObject> lamps=new();
-            public readonly List<ParticleSystem> jets=new();
+            public readonly List<(ParticleSystem stream,ParticleSystem mist)> jets=new();
         }
 
         readonly List<Response> responses=new();
         readonly HashSet<ValleyFixture> queuedFires=new();
         readonly HashSet<int> burnedTrees=new();
         Tree[] nearbyTrees=Array.Empty<Tree>();
-        AudioSource alarmSound,spraySound;
+        AudioSource alarmSound,spraySound,fireSound;
         Material scorchDecal;
         internal int ActiveAlarms => responses.Sum(item=>item.lamps.Count);
         internal int ActiveSprinklers => responses.Sum(item=>item.jets.Count);
@@ -55,19 +55,36 @@ namespace ValleyCamcorder
             {
                 var at=ValleyManifest.Point(sprinkler.at);
                 var height=Mathf.Max(.45f,at.y-sprinkler.bottom);
-                var jet=Particles(at,"Ceiling sprinkler",particles,true,.45f,height*.31f+.28f,.012f,.031f,.8f,1.8f,
-                    .98f,new Color(.64f,.82f,.94f,.74f),55);
-                jet.transform.rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);
-                var cone=jet.shape;
-                cone.angle=Mathf.Clamp(Mathf.Atan2(sprinkler.spread,height)*Mathf.Rad2Deg,8,45);
-                cone.radius=.026f;
-                response.jets.Add(jet);
+                var speed=Mathf.Clamp(height*1.87f,2.4f,7.5f);
+                var stream=AtmosphereParticles(at,"Ceiling sprinkler",ParticleLook.Drop,true,.69f,.95f,.012f,.033f,
+                    speed*.89f,speed*1.17f,.41f,new Color(.69f,.84f,.96f,.90f),123);
+                stream.transform.rotation=Quaternion.LookRotation(Vector3.down,Vector3.forward);
+                var cone=stream.shape;
+                cone.angle=Mathf.Clamp(Mathf.Atan2(sprinkler.spread,height*.89f)*Mathf.Rad2Deg,8,53);
+                cone.radius=.034f;
+                var floorAt=new Vector3(at.x,sprinkler.bottom+.020f,at.z);
+                var plane=Create("Sprinkler spray floor",floorAt,stream.transform);
+                plane.rotation=Quaternion.identity;
+                var collision=stream.collision;
+                collision.enabled=true;
+                collision.type=ParticleSystemCollisionType.Planes;
+                collision.SetPlane(0,plane);
+                collision.bounce=.22f;
+                collision.dampen=.49f;
+                collision.lifetimeLoss=.47f;
+                var mist=AtmosphereParticles(floorAt+Vector3.up*.045f,"Sprinkler floor mist",ParticleLook.Mist,true,
+                    .24f,.56f,.12f,.31f,.23f,.69f,.03f,new Color(.72f,.82f,.89f,.24f),27);
+                mist.transform.SetParent(stream.transform,true);
+                mist.transform.rotation=Quaternion.LookRotation(Vector3.up,Vector3.forward);
+                var floorSpray=mist.shape;
+                floorSpray.radius=Mathf.Max(.16f,sprinkler.spread*.73f);
+                floorSpray.angle=45;
+                response.jets.Add((stream,mist));
             }
         }
 
         void UpdateFireResponse(float now)
         {
-            if(responses.Count==0) return;
             var listener=player.view.transform.position;
             var alarmAt=Vector3.zero;
             var sprayAt=Vector3.zero;
@@ -84,18 +101,31 @@ namespace ValleyCamcorder
                     if(gain>alarmGain) {alarmAt=source; alarmGain=gain;}
                     lamp.SetActive(distance<44 && (elapsed-.56f)%1.16f<.17f);
                 }
-                foreach(var jet in response.jets)
+                foreach(var (stream,mist) in response.jets)
                 {
-                    var source=jet.transform.position;
+                    var source=stream.transform.position;
                     var distance=SoundDistance(listener,source);
-                    var gain=.65f*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(1.7f,12,distance)));
+                    var gain=.79f*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(2.5f,15,distance)));
                     if(gain>sprayGain) {sprayAt=source;sprayGain=gain;}
-                    var emission=jet.emission;
+                    var emission=stream.emission;
                     emission.enabled=distance<25 && Mathf.Abs(source.y-listener.y)<4.6f;
+                    var mistEmission=mist.emission;
+                    mistEmission.enabled=emission.enabled && distance<13;
                 }
+            }
+            var fireAt=Vector3.zero;
+            var fireGain=0f;
+            burningEmitters.RemoveAll(entry=>!entry.flame);
+            foreach(var (flame,scale) in burningEmitters)
+            {
+                var source=flame.transform.position;
+                var distance=SoundDistance(listener,source);
+                var gain=Mathf.Min(.77f,.38f+scale*.32f)*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(1.4f,14,distance)));
+                if(gain>fireGain) {fireAt=source;fireGain=gain;}
             }
             FireLoop(ref alarmSound,"venue-alarm",alarmAt,alarmGain);
             FireLoop(ref spraySound,"venue-spray",sprayAt,sprayGain);
+            FireLoop(ref fireSound,"venue-fire",fireAt,fireGain);
         }
 
         void FireLoop(ref AudioSource source,string bank,Vector3 at,float gain)
@@ -211,8 +241,7 @@ namespace ValleyCamcorder
             else LeaveScorch(at,normal,size);
             if(target) SpreadToNeighbour(at,1);
             yield return new WaitForSeconds(target ? 8.6f : 2.8f);
-            flame.Stop();
-            Destroy(flame.gameObject,1.1f);
+            StopFire(flame);
         }
 
         IEnumerator BurnTree(Tree tree,float delay)
@@ -224,16 +253,7 @@ namespace ValleyCamcorder
             Draw(new[] {tree.mesh},ValleyManifest.Point(tree.root),transform,"Scorched tree bark");
             LeaveScorch(at-Vector3.up*.19f,Vector3.up,.81f);
             yield return new WaitForSeconds(9.2f);
-            flame.Stop();
-            Destroy(flame.gameObject,1.1f);
-        }
-
-        ParticleSystem FireParticles(Vector3 at,string name,float scale,float rise)
-        {
-            var fire=Particles(at,name,tint,true,.27f,.78f,.11f*scale,.54f*scale,.64f*rise,2.1f*rise,-.19f,
-                new Color(1,.34f,.062f,.82f),24);
-            fire.transform.rotation=Quaternion.LookRotation(Vector3.up,Vector3.forward);
-            return fire;
+            StopFire(flame);
         }
 
         void LeaveScorch(Vector3 at,Vector3 normal,float size)

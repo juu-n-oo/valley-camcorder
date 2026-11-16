@@ -40,6 +40,11 @@ namespace ValleyCamcorder
             var film=Shader.Find("Hidden/Valley/Tape Signal");
             if(!film || !film.isSupported || film.passCount!=1)
             {Fail("The camcorder signal pass could not be rendered");yield break;}
+            var atmosphere=Resources.Load<Shader>("ValleyEffects/Atmosphere");
+            if(!atmosphere || !atmosphere.isSupported ||
+                new[] {"blast-body","water-impact","water-wade","water-stroke","venue-spray","venue-fire"}
+                    .Any(cue=>!player.sound.HasCue(cue)))
+            {Fail("The atmosphere shader or one of its sound banks did not load");yield break;}
             player.Pause(true);
             var pausedAt=player.TapeTime;
             yield return new WaitForSecondsRealtime(.12f);
@@ -253,6 +258,16 @@ namespace ValleyCamcorder
             if(!tank.Broken || stairs.Length==0 || !GameObject.Find("Breached wall") ||
                 player.Facilities.ActiveAlarms==0 || player.Facilities.ActiveSprinklers==0 || player.Facilities.ScorchCount==0)
             {Fail("The breach, timber fire, fire alarm, sprinklers or persistent soot were missing");yield break;}
+            var stream=GameObject.Find("Ceiling sprinkler")?.GetComponent<ParticleSystem>();
+            if(!stream || !stream.collision.enabled ||
+                stream.GetComponent<ParticleSystemRenderer>().sharedMaterial.shader!=atmosphere ||
+                !GameObject.Find("Sprinkler floor mist") || !GameObject.Find("Fire embers"))
+            {Fail("The sprinkler jets, rebounding droplets or burning embers were missing");yield break;}
+#if UNITY_EDITOR
+            if(UnityEditor.ShaderUtil.ShaderHasError(atmosphere) ||
+                UnityEditor.ShaderUtil.ShaderHasError(Shader.Find("Valley/River")))
+            {Fail("The atmosphere or water shader failed compilation");yield break;}
+#endif
             yield return new WaitForSeconds(9.4f);
             if(!stairs.Any(item=>item.Broken) || player.Facilities.ScorchCount==0)
             {Fail("The burning stairs did not collapse or the soot did not persist");yield break;}

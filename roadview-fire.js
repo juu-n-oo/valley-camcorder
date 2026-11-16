@@ -301,7 +301,7 @@
         if(alpha>.012) output.push({at:center,alpha,size:scale,seed:variation,kind,t,depth:dot(minus(center,eye),forward)});
       }
       if(power>0) {
-        const count=range>32 ? 3 : fuel ? 6 : 4;
+        const count=range>32 ? 3 : fuel ? 8 : 5;
         for(let i=0;i<count;i++) {
           const variation=fraction(seed+i*.618), phase=fraction(age*(1.15+variation*.48)+i/count);
           const angle=variation*6.283+age*.23;
@@ -313,6 +313,13 @@
             at[2]+Math.sin(angle)*width+(tree?.leanZ??0)*lean];
           const alpha=power*(.71+.21*variation)*smooth(0,.16,phase)*(1-smooth(.54,1,phase));
           plume(center,alpha,size*(.45+power*.67)*mix(.56,1.18,phase),variation,3,phase);
+        }
+        if(fuel && range<29) for(let i=0;i<8;i++) {
+          const variation=fraction(seed+i*.437), phase=fraction(age*(.68+variation*.34)+i/8);
+          const angle=variation*6.283, spread=size*(.25+phase*.82);
+          const center=[at[0]+Math.cos(angle)*spread+phase*.49,at[1]+size*.56+phase*(size*1.18+1.4),
+            at[2]+Math.sin(angle)*spread+phase*.24];
+          plume(center,power*smooth(0,.1,phase)*(1-smooth(.44,1,phase)),.014+variation*.019,variation,4,phase);
         }
       }
       const count=range>34 ? 2 : fuel ? 4 : 2;
@@ -332,5 +339,5 @@
     return light;
   }
 
-  Valley.fire={ignite,update,visuals,scorchVisuals};
+  Valley.fire={ignite,update,strength,visuals,scorchVisuals};
 })();

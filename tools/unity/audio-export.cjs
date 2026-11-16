@@ -17,6 +17,7 @@ const clips=[
   ["cast","toss",[]],["stove-click","stoveIgnition",[true,false]],["stove-light","stoveIgnition",[false,true]],
   ["timber","woodImpact",[1,true]],["tire","hiss",[0,.72,1350,.21,.63,.018]],
   ["cloth-tear","hiss",[0,.19,2380,.29,.90,.004]],
+  ["blast-body","blast",[0,0],2.38],
   ["water-wade","splash",[.72,"wade"]],["water-stroke","splash",[.94,"stroke"]],
   ["water-impact","splash",[1.12,"impact"]],["sand-contact","sand",[1]],
   ["rock-contact","rock",[.92,.48]],["metal-ricochet","ricochet",[.92,.54,47,0,0,false]],
@@ -37,7 +38,8 @@ const clips=[
   ["underwater",[["submerged",.35]],4.5],["tap-water",[["runningTap",1]],4.5],
   ["pipe-water",[["runningLeak",1,0]],4.5],
   ["venue-alarm",[["fireSystem",{alarm:{level:1,pan:0},spray:{level:0,pan:0}}]],6.0,2.45],
-  ["venue-spray",[["fireSystem",{alarm:{level:0,pan:0},spray:{level:1,pan:0}}]],4.5,3]
+  ["venue-spray",[["fireSystem",{spray:{level:1,pan:0}}]],4.5,3],
+  ["venue-fire",[["fireSystem",{fire:{level:1,pan:0}}]],4.5,3]
 ].filter(([,method])=>typeof method!=="string" || synth.includes("\n    "+method+"("));
 
 function wav(samples, rate) {
@@ -134,10 +136,11 @@ async function exportSounds() {
     const page=await browser.newPage();
     await page.addScriptTag({content:read("render.js")+"\nglobalThis.Valley = Valley;"});
     await page.addScriptTag({content:"const {random,clamp,mix,smooth}=Valley;\n"+synth+"\nglobalThis.ValleySound=Sound;"});
-    for(const [name,method,args,loopSeconds=3] of selection) {
+    for(const [name,method,args,seconds] of selection) {
       const looping=Array.isArray(method);
-      const samples=await page.evaluate(async ({method,args,looping,rate})=>{
-        const context=new OfflineAudioContext(2,Math.round(rate*(looping?args:1.25)),rate);
+      const duration=looping ? args : seconds??1.25;
+      const samples=await page.evaluate(async ({method,args,looping,rate,duration})=>{
+        const context=new OfflineAudioContext(2,Math.round(rate*duration),rate);
         const audio=new globalThis.ValleySound();
         audio.initialize(context);
         audio.master.gain.value=.77;
@@ -153,11 +156,11 @@ async function exportSounds() {
         const buffer=await context.startRendering();
         const left=buffer.getChannelData(0), right=buffer.getChannelData(1);
         return Array.from(left,(value,i)=>(value+right[i])*.5);
-      },{method,args,looping,rate});
+      },{method,args,looping,rate,duration});
       let segment=samples;
       if(looping) {
         const start=Math.round(rate*.61), fade=Math.round(rate*.045);
-        segment=samples.slice(start+fade,start+Math.round(loopSeconds*rate)+fade);
+        segment=samples.slice(start+fade,start+Math.round((seconds??3)*rate)+fade);
         for(let i=0;i<fade;i++) {
           const at=segment.length-fade+i;
           segment[at]+=(samples[start+i]-segment[at])*i/(fade-1);

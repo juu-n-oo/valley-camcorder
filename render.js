@@ -849,7 +849,11 @@ globalThis.Valley = (() => {
       return ${waterRipples.origin}+age*(${waterRipples.speed}+${waterRipples.boost}*min(power,1.6));
     }
     float rippleFade(float age, float power) {
-      return exp(-age*mix(1.22,.71,min(power,1.0)))*(1.0-smoothstep(2.8,${waterRipples.life},age));
+      return exp(-age*mix(1.40,.66,min(power,1.0)))*(1.0-smoothstep(2.72,${waterRipples.life},age));
+    }
+    float ripplePacket(float front, float age, float power) {
+      float width = mix(.48,1.48,smoothstep(.22,1.18,power)) + age*.11;
+      return smoothstep(-width,-width*.32,front)*(1.0-smoothstep(.08,.44,front));
     }`;
 
   const waterVertex = `#version 300 es
@@ -872,8 +876,8 @@ globalThis.Valley = (() => {
         vec2 delta = vP.xz-r.xy;
         if (max(abs(delta.x),abs(delta.y)) > radius+.54) continue;
         float front = length(delta)-radius;
-        float band = smoothstep(-1.65,-.76,front)*(1.0-smoothstep(.12,.54,front));
-        if (band > 0.0) wave += .090*r.w*band*rippleFade(age,r.w)*sin(front*4.8);
+        float band = ripplePacket(front,age,r.w);
+        if (band > 0.0) wave += .109*r.w*band*rippleFade(age,r.w)*sin(front*5.8);
       }
       vP.y += clamp(wave,-.23,.24);
       gl_Position = uVP * vec4(vP,1);
@@ -912,23 +916,24 @@ globalThis.Valley = (() => {
         float radius = rippleRadius(age,r.w);
         float foamRadius = .30+.48*r.w+age*.58;
         vec2 delta = p-r.xy;
-        if (max(abs(delta.x),abs(delta.y)) > max(radius+.39,foamRadius)) continue;
+        if (max(abs(delta.x),abs(delta.y)) > max(radius+.44,foamRadius)) continue;
         float d = length(delta);
         float front = d-radius;
-        float span = mix(.94,2.08,smoothstep(.23,1.08,r.w));
-        if (front > -span && front < .39) {
-          float band = smoothstep(-span,-.42*span,front)*(1.0-smoothstep(.09,.39,front));
-          float pulse = band*r.w*rippleFade(age,r.w);
-          float crest = cos((front+.035*broad+.022*shortWave)*17.8);
+        float packet = ripplePacket(front,age,r.w);
+        if (packet > .001) {
+          float pulse = packet*r.w*rippleFade(age,r.w);
+          float crest = cos((front+.048*broad+.031*shortWave)*mix(21.5,13.0,smoothstep(.25,3.3,age)));
           vec2 outward = delta/max(.06,d);
-          float light = clamp(.68+.24*dot(outward,vec2(-.75,-.66))+.11*shortWave,.37,1.0);
-          slant += outward*pulse*(crest*.105*detail+sin(front*4.8)*.13);
-          ring += pulse*(.031+detail*(.46*light*smoothstep(.26,.91,crest)+.095*smoothstep(.74,.99,crest)));
-          trough += pulse*.22*detail*smoothstep(.24,.94,-crest);
+          float light = clamp(.65+.27*dot(outward,vec2(-.75,-.66))+.13*shortWave,.22,1.0);
+          float breaks = mix(.35,1.0,smoothstep(-.54,.80,shortWave*.62+broad*.73));
+          slant += outward*pulse*(crest*.15*detail+sin(front*5.8)*.14);
+          ring += pulse*(.021+detail*.45*light*breaks*smoothstep(.35,.93,crest));
+          trough += pulse*.26*detail*smoothstep(.21,.95,-crest);
         }
-        if (age < .93 && d < foamRadius) {
-          float bubbles = smoothstep(.36,1.09,r.w)*(1.0-smoothstep(.18,.93,age));
-          froth = max(froth,bubbles*(1.0-smoothstep(foamRadius*.22,foamRadius,d)));
+        if (age < 1.19 && d < foamRadius) {
+          float wake = cos((d-(foamRadius*.34+age*.13))*15.0 + broad*.61);
+          float bubbles = smoothstep(.40,1.13,r.w)*(1.0-smoothstep(.24,1.19,age));
+          froth = max(froth,bubbles*(.35+.65*smoothstep(-.38,.97,wake))*(1.0-smoothstep(foamRadius*.35,foamRadius,d)));
         }
       }
       slant = clamp(slant,vec2(-.28),vec2(.28));
@@ -997,7 +1002,7 @@ globalThis.Valley = (() => {
       vAxis = vec2(0.0,1.0);
       vStretch = 1.0;
       gl_PointSize = clamp(size,1.0,38.0);
-      if (vDrop > .5) {
+      if (vDrop > .5 && vDrop < 1.5) {
         vec4 travel = uVP * vec4(aDrop.xyz*.027,0.0);
         vec2 motion = (travel.xy-gl_Position.xy*travel.w/depth)*vec2(uSize.x,-uSize.y)*(.5/depth);
         float distance = length(motion);
@@ -1006,6 +1011,7 @@ globalThis.Valley = (() => {
         gl_PointSize = clamp(size*vStretch,1.0,47.0);
       }
       vColor = aColor;
+      if (vDrop > .5) vColor.a *= smoothstep(.14,.49,depth);
     }`;
 
   const particleFragment = `#version 300 es
@@ -1017,14 +1023,20 @@ globalThis.Valley = (() => {
     out vec4 pixel;
     void main() {
       vec2 p = gl_PointCoord*2.0-1.0;
+      if (vDrop > 1.5) {
+        float veil=max(0.0,1.0-dot(p,p));
+        pixel=vec4(vColor.rgb,vColor.a*veil*veil*.72);
+        return;
+      }
       if (vDrop > .5) {
         vec2 drop = vec2(dot(p,vAxis),dot(p,vec2(-vAxis.y,vAxis.x))*vStretch);
         drop.y /= mix(.73,1.0,smoothstep(-.84,.58,drop.x));
         float edge = length(drop);
         if (edge > 1.0) discard;
-        float shine = 1.0-smoothstep(.12,.67,length(drop-vec2(.31,-.22)));
-        vec3 color = mix(vColor.rgb*.76,vec3(.99,1.0,.985),.20+.80*shine);
-        pixel = vec4(color,vColor.a*(.60+.40*shine)*(1.0-smoothstep(.52,1.0,edge)));
+        float shine = 1.0-smoothstep(.075,.54,length(drop-vec2(.34,-.29)));
+        float rim = smoothstep(.35,.76,edge);
+        vec3 color = mix(vColor.rgb*.69,vec3(.99,1.0,.985),.24+.71*shine+.05*rim);
+        pixel = vec4(color,vColor.a*(.42+.44*shine+.14*rim)*(1.0-smoothstep(.65,1.0,edge)));
         return;
       }
       float d = length(p);
@@ -1044,7 +1056,7 @@ globalThis.Valley = (() => {
     flat out float vAlpha;
     void main() {
       vec2 p=vec2(float(gl_VertexID%2),float(gl_VertexID/2))*2.0-1.0;
-      float stretch=aCloud.z>2.5 ? mix(1.30,1.82,aCloud.y) : 1.0;
+      float stretch=aCloud.z>3.5 ? 2.38 : aCloud.z>2.5 ? mix(1.30,1.82,aCloud.y) : 1.0;
       vec3 corner=uAxes[0]*p.x+uAxes[1]*p.y*stretch;
       gl_Position=uVP*vec4(aCenter+corner*aSizeAlpha.x,1.0);
       vCorner=p;
@@ -1061,6 +1073,12 @@ globalThis.Valley = (() => {
     ${hashGLSL}
     void main() {
       float seed=vCloud.x, age=vCloud.y, kind=vCloud.z;
+      if(kind>3.5) {
+        float point=length(vCorner*vec2(1.12,1.0));
+        float core=1.0-smoothstep(.12,.86,point);
+        pixel=vec4(mix(vec3(.99,.24,.016),vec3(1.6,1.15,.58),core),vAlpha*core);
+        return;
+      }
       if(kind>2.5) {
         float y=vCorner.y*.5+.5;
         float curl=sin(y*7.3+age*7.8+seed*6.28)*.29*y;
@@ -1072,16 +1090,18 @@ globalThis.Valley = (() => {
         float edge=abs(q.x)+(.48-tongue)*(.13+y*.21);
         float mask=(1.0-smoothstep(width*.50,width,edge))*smoothstep(.02,.20,y)*(1.0-smoothstep(tip-.15,tip,y));
         float heat=(1.0-smoothstep(width*.06,width*.74,edge))*(1.0-smoothstep(.30,.82,y));
-        vec3 rim=mix(vec3(.64,.073,.012),vec3(1.23,.36,.046),turbulence);
-        vec3 core=mix(vec3(1.36,.68,.082),vec3(1.55,1.33,.72),smoothstep(.35,.83,heat));
+        vec3 rim=mix(vec3(.55,.052,.009),vec3(1.30,.40,.049),turbulence);
+        vec3 core=mix(vec3(1.43,.62,.078),vec3(1.58,1.39,.78),smoothstep(.35,.83,heat));
         pixel=vec4(mix(rim,core,smoothstep(.13,.72,heat)),clamp(vAlpha*mask*(.89+.20*tongue),0.0,1.0));
         return;
       }
       float cs=cos(vCloud.w),sn=sin(vCloud.w);
       vec2 p=mat2(cs,sn,-sn,cs)*vCorner;
       vec2 q=p+vec2(seed*19.0,age*.57);
-      float billow=.61*noise(q*3.64)+.27*noise(q*7.73)+.12*noise(q*18.3);
-      float rim=length(vCorner)+(.49-billow)*.62;
+      vec2 curl=vec2(noise(q*2.6+vec2(7.1,age)),noise(q*2.9-vec2(age,5.7)))-.5;
+      q+=curl*.53;
+      float billow=.56*noise(q*3.64)+.30*noise(q*8.73)+.14*noise(q*20.3);
+      float rim=length(vCorner)+(.49-billow)*.88;
       float boundary=1.0-smoothstep(.85,1.0,max(abs(p.x),abs(p.y)));
       float alpha=vAlpha*(1.0-smoothstep(.18,.97,rim))*(.46+.54*billow)*boundary;
       vec3 c;
@@ -1091,8 +1111,8 @@ globalThis.Valley = (() => {
         c=mix(vec3(.62,.14,.035),yellow,smoothstep(.17,.65,billow+core-age*.24));
         alpha*=1.0+.47*core;
       } else {
-        vec3 shadow=kind<1.5 ? vec3(.23,.24,.24) : vec3(.42,.362,.30);
-        vec3 light=kind<1.5 ? vec3(.68,.685,.666) : vec3(.72,.63,.52);
+        vec3 shadow=kind<1.5 ? vec3(.085,.087,.085) : vec3(.37,.306,.24);
+        vec3 light=kind<1.5 ? vec3(.50,.50,.46) : vec3(.71,.62,.50);
         c=mix(shadow,light,clamp(billow*.81+.15*vCorner.y+.20*seed,0.0,1.0));
         if(kind<1.5) c+=vec3(.26,.08,.015)*(1.0-smoothstep(0.0,.28,age))*(1.0-billow);
       }

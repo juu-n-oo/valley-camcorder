@@ -569,29 +569,29 @@
       }
     }
 
-    splash(strength,kind) {
-      if (!this.context) return;
+    splash(strength,kind,volume=1,pan=0) {
+      if (!this.context || volume<.015) return;
       const t = this.context.currentTime;
       const stroke = kind === "stroke", impact = kind === "impact";
-      const level = Math.min(1.22,Math.sqrt(strength));
-      const pitch = mix(.88,1.12,this.random());
-      // The surface slap leads into the heavier water and the returning wash.
-      this.hiss(t,.091,1210*pitch,(impact ? .51 : .41)*level,.65,stroke ? .011 : .0028);
-      this.hiss(t+.004,.119,3150*pitch,.35*level,.71,stroke ? .013 : .0038);
-      this.hiss(t+.014,stroke ? .272 : .203,535*pitch,.35*level,.59,.012);
-      this.decayTone(t+.009,.086,186*pitch,92*pitch,.108*level);
-      const wash = t+(stroke ? .081 : .046);
-      this.hiss(wash,stroke ? .289 : .181,836*pitch,(stroke ? .31 : .23)*level,.64,.014);
-      this.hiss(wash+.025,.155,2340*pitch,.17*level,.85,.006);
+      const level = Math.min(1.34,Math.sqrt(strength))*volume;
+      const pitch = mix(.86,1.14,this.random()), out=this.transientPan(t,pan);
+      this.hiss(t,.077,impact ? 1530*pitch : 1270*pitch,(impact ? .91 : .43)*level,.57,stroke ? .015 : .0018,out);
+      this.hiss(t+.004,.119,(impact ? 4110 : 2960)*pitch,(impact ? .68 : .31)*level,.68,stroke ? .018 : .0036,out);
+      this.hiss(t+.015,impact ? .32 : .21,(impact ? 385 : 590)*pitch,(impact ? .72 : .31)*level,.52,.011,out);
+      this.decayTone(t+.012,.085,impact ? 151*pitch : 219*pitch,101*pitch,.10*level,out);
+      const wash=t+(impact ? .11 : stroke ? .066 : .042);
+      const tail=this.hiss(wash,impact ? .51 : .27,720*pitch,(impact ? .58 : .27)*level,.56,.022,out);
+      tail.onended=()=>out.disconnect();
+      this.hiss(wash+.041,impact ? .23 : .14,2140*pitch,.24*level,.78,.010,out);
 
-      // Short rising bubble tones and scattered droplets break up the tail.
-      const drops = impact ? 7 : stroke ? 6 : 4;
+      const drops = impact ? 12 : stroke ? 7 : 4;
       for (let i=0; i<drops; i++) {
         const size = this.random();
-        const delay = .024+(i+this.random()*.81)*(stroke || impact ? .032 : .027);
-        const frequency = mix(1430,285,size)*pitch;
-        const volume = mix(.050,.028,i/drops)*level;
-        this.decayTone(t+delay,mix(.032,.069,size),frequency,frequency*mix(1.42,1.18,size),volume);
+        const delay = .026+(i+this.random()*.88)*(impact ? .040 : .022);
+        const frequency = mix(1750,300,size)*pitch;
+        const droplet = mix(.10,.025,i/drops)*level;
+        this.decayTone(t+delay,mix(.021,.053,size),frequency,frequency*mix(1.43,1.17,size),droplet*.69,out);
+        this.hiss(t+delay,.051,mix(5500,1680,size)*pitch,droplet,.93,.002,out);
       }
     }
 
@@ -1048,29 +1048,48 @@
         gain.connect(panner).connect(this.effects);
         return {gain,panner,peak,level:0,pan:0};
       };
-      const alarm=channel(.31), spray=channel(.71);
+      const alarm=channel(.31), spray=channel(.95), fire=channel(.73);
       const ringing=loop(bell), rain=loop(this.noise);
       ringing.connect(alarm.gain);
-      for(const [frequency,q,volume] of [[1170,.62,.38],[3240,.67,.70]]) {
+      const waterHits=context.createBuffer(1,rate*3,rate), flame=context.createBuffer(1,rate*3,rate);
+      const rainBed=waterHits.getChannelData(0), fireBed=flame.getChannelData(0);
+      const noise=this.noise.getChannelData(0), next=random(21691);
+      let waterImpact=0, crack=0, low=0;
+      const waterDecay=Math.exp(-280/rate), crackDecay=Math.exp(-160/rate);
+      for(let i=0;i<noise.length;i++) {
+        const t=i/rate, grain=noise[i];
+        waterImpact=next()<155/rate ? mix(.24,1.56,next()) : waterImpact*waterDecay;
+        crack=next()<38/rate ? next()**2*2.3 : crack*crackDecay;
+        low+=(grain-low)*.039;
+        rainBed[i]=grain*waterImpact*(.79+.21*Math.sin(t*Math.PI*2*7/3));
+        fireBed[i]=low*(1.66+.58*Math.sin(t*Math.PI*2*5/3))+grain*crack*.64;
+      }
+      const impacts=loop(waterHits), burning=loop(flame);
+      for(const [source,output,frequency,q,volume] of [
+        [rain,spray,680,.62,.41],[rain,spray,3260,.63,.66],[rain,spray,6350,.84,.23],
+        [impacts,spray,1640,.72,.64],[burning,fire,419,.56,.56],[burning,fire,2180,.74,.70]
+      ]) {
         const filter=context.createBiquadFilter(), band=context.createGain();
         filter.type="bandpass";
         filter.frequency.value=frequency;
         filter.Q.value=q;
         band.gain.value=volume;
-        rain.connect(filter).connect(band).connect(spray.gain);
+        source.connect(filter).connect(band).connect(output.gain);
       }
       ringing.start();
       rain.start(0,.39);
-      return {alarm,spray};
+      impacts.start();
+      burning.start(0,.53);
+      return {alarm,spray,fire};
     }
 
     fireSystem(mix) {
       if(!this.context) return;
-      if(!this.fireAudio && (mix.alarm.level || mix.spray.level)) this.fireAudio=this.buildFireSystem();
+      if(!this.fireAudio && (mix.alarm?.level || mix.spray?.level || mix.fire?.level)) this.fireAudio=this.buildFireSystem();
       if(!this.fireAudio) return;
       const t=this.context.currentTime;
-      for(const key of ["alarm","spray"]) {
-        const channel=this.fireAudio[key], {level,pan}=mix[key];
+      for(const key of ["alarm","spray","fire"]) {
+        const channel=this.fireAudio[key], {level=0,pan=0}=mix[key]??{};
         if(Math.abs(channel.level-level)>.006 || (level===0 && channel.level!==0)) {
           channel.level=level;
           channel.gain.gain.setTargetAtTime(level*channel.peak,t,.077);
@@ -1123,42 +1142,53 @@
       if(!this.context || distance>=92) return;
       const context=this.context, t=context.currentTime;
       const volume=(1-smooth(43,92,distance))/(1+(distance/22)**1.48);
-      const input=context.createGain(), panner=context.createStereoPanner();
+      const input=context.createGain(), panner=context.createStereoPanner(), air=context.createBiquadFilter();
       input.gain.value=volume;
       panner.pan.value=clamp(pan,-.83,.83);
-      input.connect(panner).connect(this.blastPeak);
+      air.type="lowpass";
+      air.frequency.value=mix(11800,1650,smooth(8,92,distance));
+      air.Q.value=.67;
+      input.connect(air).connect(panner).connect(this.blastPeak);
       const ambience=this.effects.gain;
       ambience.cancelScheduledValues(t);
       ambience.setTargetAtTime(1-.79*volume,t,.009);
-      ambience.setTargetAtTime(1,t+.24,.26);
+      ambience.setTargetAtTime(1,t+.22,.31);
 
       const recordings=this.blastRecordings;
+      const recorded=Boolean(recordings?.length);
+      let sources=recorded ? 2 : 1;
+      const release=()=>{
+        if(--sources===0) { input.disconnect(); air.disconnect(); panner.disconnect(); }
+      };
       if(recordings?.length) {
         const index=this.nextBlastRecording??0;
         this.nextBlastRecording=(index+1)%recordings.length;
         const source=context.createBufferSource();
         source.buffer=recordings[index];
-        source.connect(input);
+        const gain=context.createGain();
+        gain.gain.value=.77;
+        source.connect(gain).connect(input);
         source.start(t);
-        source.onended=()=>{source.disconnect();input.disconnect();panner.disconnect();};
-        return;
+        source.onended=()=>{source.disconnect();gain.disconnect();release();};
       }
-      this.hiss(t,.075,3340,1.91,.55,.0014,input);
-      this.hiss(t+.002,.16,1140,1.34,.61,.0016,input);
-      this.hiss(t+.003,.65,294,1.66,.59,.003,input);
-      this.decayTone(t+.004,.91,117,35,1.08,input);
-      this.decayTone(t+.033,.82,78,27,.51,input);
-      this.hiss(t+.019,1.72,133,1.19,.61,.009,input);
-      this.hiss(t+.064,1.32,488,.78,.60,.013,input);
-      for(const [delay,frequency,strength] of [[.119,1560,.51],[.234,775,.38],[.391,491,.29]]) {
-        this.hiss(t+delay,.29,frequency,strength,.70,.006,input);
+      const body=recorded ? .56 : 1;
+      this.hiss(t,.062,4240,1.60*body,.54,.0011,input);
+      this.hiss(t+.003,.138,1190,1.26*body,.55,.0028,input);
+      this.hiss(t+.004,.53,279,1.52*body,.53,.005,input);
+      this.decayTone(t+.009,.63,99,37,.83*body,input);
+      this.decayTone(t+.047,.79,64,29,.36*body,input);
+      this.hiss(t+.029,1.38,126,1.22*body,.52,.023,input);
+      this.hiss(t+.064,1.12,539,.77*body,.57,.022,input);
+      for(const [delay,frequency,strength] of [[.106,1670,.57],[.221,1070,.45],[.374,612,.36],[.602,380,.22]]) {
+        this.hiss(t+delay,.26,frequency,strength*body,.61,.007,input);
       }
-      for(let i=0;i<12;i++) {
-        this.hiss(t+.083+i*.048+this.random()*.084,.094,mix(1220,5290,this.random()),
-          mix(.12,.39,this.random()),.79,.002,input);
+      for(let i=0;i<15;i++) {
+        const delay=.052+i*.043+this.random()*.095;
+        this.hiss(t+delay,.093,mix(1220,6460,this.random()),
+          mix(.15,.44,this.random())*body*(1-delay*.78),.84,.002,input);
       }
-      const tail=this.hiss(t+.31,1.75,218,.46,.54,.040,input);
-      tail.onended=()=>{input.disconnect();panner.disconnect();};
+      const tail=this.hiss(t+.25,1.95,214,.49*body,.54,.053,input);
+      tail.onended=release;
     }
 
     woodCollapse(level,pan) {
@@ -2051,29 +2081,53 @@
 
   function spray(x,z,strength,heading,impact = false,stroke = false) {
     ripple(x,z,strength);
-    audio.splash(strength,impact ? "impact" : stroke ? "stroke" : "wade");
-    const scale = Math.min(1.52,strength**.66);
-    const crown = Math.round((impact ? 46 : stroke ? 37 : 30)*scale);
-    const beads = Math.round((impact ? 110 : stroke ? 78 : 65)*scale);
-    const haze = Math.round((impact ? 43 : stroke ? 32 : 28)*scale);
-    const turn = waterRandom()*Math.PI*2, kick = impact ? 1.15 : stroke ? 1.04 : 1, surface=terrain.waterLevel(x,z);
+    const surface=terrain.waterLevel(x,z), dx=x-player.x, dz=z-player.z;
+    const distance=Math.hypot(dx,surface-player.feet-player.eyeHeight,dz);
+    const volume=(1-smooth(impact ? 14 : 6,impact ? 42 : 20,distance))/(1+(distance/8)**1.6);
+    const pan=(dx*Math.cos(player.yaw)+dz*Math.sin(player.yaw))/Math.max(2,distance);
+    audio.splash(strength,impact ? "impact" : stroke ? "stroke" : "wade",volume,pan);
+    const scale=Math.min(1.52,strength**.66), lod=distance<24 ? 1 : .44;
+    const crown = Math.round((impact ? 58 : stroke ? 29 : 24)*scale*lod);
+    const beads = Math.round((impact ? 101 : stroke ? 62 : 49)*scale*lod);
+    const haze = Math.round((impact ? 28 : 10)*scale*lod);
+    const turn = waterRandom()*Math.PI*2, kick = impact ? 1.42 : 1;
+    const momentum=Math.min(impact ? 1.45 : .65,Math.hypot(...heading)*.46);
+    const direction=Math.atan2(heading[1],heading[0]);
+    const biasX=Math.cos(direction)*momentum, biasZ=Math.sin(direction)*momentum;
     for (let i=0; i<crown+beads+haze; i++) {
       const rim = i<crown, mist = i>=crown+beads;
       const angle = rim ? turn+(i+waterRandom()*.92)*Math.PI*2/crown : waterRandom()*Math.PI*2;
       const dx = Math.cos(angle), dz = Math.sin(angle);
       const radius = scale*(rim ? mix(.090,.24,waterRandom()) : mix(.022,.18,waterRandom()));
       const pos = [x+dx*radius,surface+mix(.026,.085,waterRandom()),z+dz*radius];
-      const radial = scale*kick*(rim ? mix(1.25,2.72,waterRandom()) : mix(.68,3.28,waterRandom()));
-      const rise = rim ? mix(1.85,3.22,waterRandom()) : mist ? mix(.89,2.34,waterRandom()) : mix(1.65,4.46,waterRandom());
+      const lobe=.81+.19*Math.sin(angle*7+turn);
+      const radial = scale*kick*(rim ? mix(1.2,2.2,waterRandom())*lobe : mix(.68,3.38,waterRandom()));
+      const rise = rim ? mix(2.65,4.46,waterRandom())*lobe : mist ? mix(.78,1.84,waterRandom()) : mix(1.25,4.84,waterRandom());
       const lift = Math.min(6.2,rise*scale*kick);
-      const velocity = [dx*radial+heading[0]*.52,lift,dz*radial+heading[1]*.52];
-      const life = mist ? mix(.29,.57,waterRandom()) : Math.max(mix(.56,1.00,waterRandom()),lift*2/waterGravity+.12);
-      const size = scale*(mist ? mix(.066,.142,waterRandom()) : rim ? mix(.035,.086,waterRandom()) : mix(.017,.069,waterRandom()**1.35));
+      const velocity = [dx*radial+biasX,lift,dz*radial+biasZ];
+      const life = mist ? mix(.31,.69,waterRandom()) : Math.max(mix(.52,.89,waterRandom()),lift*2/waterGravity+.11);
+      const size = scale*(mist ? mix(.11,.24,waterRandom()) : rim ? mix(.040,.106,waterRandom()) : mix(.017,.066,waterRandom()**1.35));
       const light = mix(.73,1,waterRandom());
-      const alpha = mist ? mix(.12,.29,waterRandom()) : mix(.73,1,waterRandom());
-      const landingWave = !rim && !mist && (i-crown)%(impact ? 27 : 42)===0 ? .16+.11*scale : 0;
-      particles.push({pos,velocity,life,total:life,size,color:[light*.93,light*.99,light],alpha,kind:"water",drop:!mist,landingWave});
+      const alpha = mist ? mix(.13,.29,waterRandom()) : mix(.68,1,waterRandom());
+      const landingWave = !rim && !mist && (i-crown)%(impact ? 20 : 42)===0 ? .15+.14*scale : 0;
+      particles.push({pos,velocity,life,total:life,size,color:[light*.93,light*.99,light],
+        alpha,kind:"water",drop:!mist,mist,landingWave});
     }
+  }
+
+  function blastSplash([x,y,z]) {
+    let closest=null, range=6.6;
+    for(const offset of [0,-2.6,2.6,-5.2,5.2]) {
+      const along=z+offset;
+      const a=terrain.bank(along,-1)+.36, b=terrain.bank(along,1)-.36;
+      if(a>=b) continue;
+      const across=clamp(x,a,b), surface=terrain.waterLevel(across,along);
+      const distance=Math.hypot(across-x,surface-y,offset);
+      if(distance>=range || terrain.height(across,along)>surface-.10) continue;
+      range=distance;
+      closest=[across,along];
+    }
+    if(closest) spray(...closest,mix(1.56,.79,range/6.6),[closest[0]-x,closest[1]-z],true);
   }
 
   function grit([x,y,z],strength) {
@@ -2623,6 +2677,7 @@
     const distance=Math.hypot(...offset);
     const pan=(offset[0]*Math.cos(player.yaw)+offset[2]*Math.sin(player.yaw))/Math.max(2,distance);
     audio.blast(distance,pan);
+    blastSplash(site.at);
     blastPlayer(site.at,distance,radius,aspect);
     props.blast(map,site.at,radius);
     const interior=map.road.interior, shattered={};
@@ -3417,9 +3472,15 @@
       const fragment = p.kind==="fragment";
       const {pos,velocity} = p;
       const bubble = p.kind==="bubble";
-      const gravity = bubble ? -.14 : water && p.drop ? waterGravity : fragment ? 9.8 : wood ? 8.4 : 5.3;
+      const gravity = bubble ? -.14 : water ? (p.drop ? waterGravity : .85) : fragment ? 9.8 : wood ? 8.4 : 5.3;
       p.life -= dt;
       velocity[1] -= gravity*dt;
+      if(water) {
+        const drag=Math.exp(-dt*(p.mist ? 4.5 : .21));
+        velocity[0]*=drag;
+        velocity[2]*=drag;
+        if(p.mist) velocity[1]*=drag;
+      }
       p.pos = [pos[0]+velocity[0]*dt,pos[1]+(velocity[1]+(water ? gravity*.5*dt : 0))*dt,pos[2]+velocity[2]*dt];
       const floor=fragment ? p.floor??Math.max(terrain.height(p.pos[0],p.pos[2]),
         Valley.roadview.floor(map.road,p.pos[0],p.pos[2],pos[1]+.04).top) : -Infinity;
@@ -3496,7 +3557,7 @@
         take:takeProp,place:finishPlacement,use:fixtureAction,miss:()=>show("NEED ROOM TO SET DOWN")});
       updateToss(dt,aspect);
     }
-    audio.fireSystem(utilities.fireSound(map.road.services,[player.x,player.feet+player.eyeHeight,player.z],player.yaw,sceneTime));
+    audio.fireSystem(utilities.fireSound(map.road.services,[player.x,player.feet+player.eyeHeight,player.z],player.yaw,sceneTime,fires));
     while(bursts.length && sceneTime-bursts[0].time>utilities.burstLife) bursts.shift();
     fire.update(map,fires,sceneTime,collapseTimber);
     updateDiscarded(dt);
@@ -3593,7 +3654,8 @@
         continue;
       }
       const contact = p.drop && p.velocity[1]<0 ? smooth(.006,.086,p.pos[1]-terrain.waterLevel(p.pos[0],p.pos[2])) : 1;
-      const fade = p.alpha*smooth(0,.17,p.life/p.total)*contact;
+      const age=1-p.life/p.total;
+      const fade = p.alpha*smooth(0,p.mist ? .57 : .17,1-age)*contact*(p.mist ? smooth(0,.17,age) : 1);
       if (p.streak) {
         const tail = Math.min(p.total-p.life,.047);
         for (let i=1; i<=4; i++) {
@@ -3602,7 +3664,8 @@
         }
       }
       const drift = p.drop ? p.velocity : null;
-      cloud.push(...p.pos,...p.color,fade,p.size,drift?.[0]??0,drift?.[1]??0,drift?.[2]??0,drift ? 1 : 0);
+      cloud.push(...p.pos,...p.color,fade,p.size*(p.mist ? 1+age : 1),
+        drift?.[0]??0,drift?.[1]??0,drift?.[2]??0,drift ? 1 : p.mist ? 2 : 0);
     }
     const cam = currentCamera(aspect), pose = currentPose();
     fire.scorchVisuals(map.road.interior,cam,glass);

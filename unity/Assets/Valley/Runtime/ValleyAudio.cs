@@ -134,17 +134,40 @@ namespace ValleyCamcorder
 
         public void WorldCue(string key,Vector3 at,float volume)
         {
+            bool blast=key=="blast", water=key is "water-impact" or "water-stroke" or "water-wade";
+            float range=blast ? 105 : key=="water-impact" ? 42 : 20;
+            float distance=blast || water ? Vector3.Distance(at,listener.position) : 0;
+            if(distance>=range) return;
             AudioClip clip;
             var recording=key=="ceramic" && !worldCues.ContainsKey(key) ? "small" : key;
             if(worldCues.TryGetValue(recording,out var choices)) clip=choices[UnityEngine.Random.Range(0,choices.Count)];
+            else if(blast && effects.TryGetValue("blast-body",out var body)) clip=body;
             else if(!effects.TryGetValue(key,out clip)) return;
             LastWorldCue=key;
             var source=WorldSource(key,at,transform,volume);
             source.clip=clip;
-            source.pitch=UnityEngine.Random.Range(.92f,1.08f)*(key=="ceramic" ? .78f : 1);
-            if(key=="blast") {source.maxDistance=105; source.minDistance=9;}
-            source.Play();
-            Destroy(source.gameObject,clip.length/source.pitch+.15f);
+            source.pitch=UnityEngine.Random.Range(blast ? .967f : .92f,blast ? 1.032f : 1.08f)*(key=="ceramic" ? .78f : 1);
+            float seconds=clip.length;
+            if(blast || water)
+            {
+                source.spatialBlend=1;
+                source.maxDistance=range;
+                source.minDistance=blast ? 8.5f : key=="water-impact" ? 2.0f : 1.1f;
+                source.dopplerLevel=0;
+                source.priority=blast ? 43 : 113;
+                var filter=source.gameObject.AddComponent<AudioLowPassFilter>();
+                var air=Mathf.SmoothStep(0,1,Mathf.InverseLerp(3,range,distance));
+                filter.cutoffFrequency=Mathf.Lerp(Mathf.Lerp(14000,1800,air),720,depthTarget/.62f);
+                source.volume*=Mathf.Lerp(1,.46f,depthTarget/.62f);
+            }
+            if(blast && effects.TryGetValue("blast-body",out var impact) && clip!=impact)
+            {
+                source.PlayOneShot(clip,.73f);
+                source.PlayOneShot(impact,.43f);
+                seconds=Mathf.Max(seconds,impact.length);
+            }
+            else source.Play();
+            Destroy(source.gameObject,seconds/source.pitch+.15f);
         }
 
         public AudioSource WorldLoop(string key,Vector3 at,Transform parent,float volume)

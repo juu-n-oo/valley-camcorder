@@ -11,10 +11,10 @@
   const burstLife=10.5;
   const alarmDelay=.56, sprayDelay=1.12;
   const sprayRandom=random(20963);
-  const drops=Array.from({length:84},(_,i)=>{
+  const drops=Array.from({length:108},(_,i)=>{
     const angle=sprayRandom()*Math.PI*2, spread=mix(.16,1,sprayRandom()**.45);
-    return {x:Math.cos(angle)*spread,z:Math.sin(angle)*spread,start:(i+.5)/95,
-      fall:mix(.55,.93,sprayRandom()),size:mix(.013,.038,sprayRandom()),alpha:mix(.47,.92,sprayRandom())};
+    return {x:Math.cos(angle)*spread,z:Math.sin(angle)*spread,start:(i+.5)/126,
+      fall:mix(.49,.92,sprayRandom()),size:mix(.012,.029,sprayRandom()),alpha:mix(.47,.90,sprayRandom())};
   });
 
   function build(scene,a,b,height) {
@@ -350,11 +350,11 @@
     return collapsed;
   }
 
-  function fireSound(services,at,yaw,time) {
-    const alarm={level:0,pan:0},spray={level:0,pan:0};
+  function fireSound(services,at,yaw,time,fires=[]) {
+    const alarm={level:0,pan:0},spray={level:0,pan:0},fire={level:0,pan:0};
     const right=[Math.cos(yaw),0,Math.sin(yaw)];
-    function hear(source,mix,near,far,volume) {
-      const offset=minus(source.at,at), distance=Math.hypot(offset[0],offset[1]*1.65,offset[2]);
+    function hear(center,mix,near,far,volume) {
+      const offset=minus(center,at), distance=Math.hypot(offset[0],offset[1]*1.65,offset[2]);
       const level=volume*(1-smooth(near,far,distance));
       if(level<=mix.level) return;
       mix.level=level;
@@ -366,11 +366,17 @@
       if(Math.abs(u)>b.w/2+38 || Math.abs(v)>b.d/2+38) continue;
       const inside=Math.abs(u)<b.w/2+.09 && Math.abs(v)<b.d/2+.09
         && at[1]>=b.y-.05 && at[1]<b.y+b.storeys*storeyHeight;
-      for(const source of site.alarms) hear(source,alarm,2,inside ? 23 : 37,inside ? 1 : .30);
+      for(const source of site.alarms) hear(source.at,alarm,2,inside ? 23 : 37,inside ? 1 : .30);
       if(time-site.fireAt<sprayDelay) continue;
-      for(const source of site.sprinklers) hear(source,spray,1.7,inside ? 12 : 8,inside ? 1 : .22);
+      for(const source of site.sprinklers) hear(source.at,spray,2.5,inside ? 15 : 9,inside ? 1 : .22);
     }
-    return {alarm,spray};
+    for(const patch of fires) {
+      if(patch.prop?.broken || patch.prop?.picked) continue;
+      const power=Valley.fire.strength(patch,time-patch.start);
+      if(power>.025) hear(patch.prop ? point(patch.prop.matrix,patch.anchor) : patch.at,
+        fire,1.5,14,power*Math.min(1,.61+.28*patch.size));
+    }
+    return {alarm,spray,fire};
   }
 
   function fireVisuals(services,time,view,objects,cloud) {
@@ -394,21 +400,30 @@
         const depth=dot(offset,forward), extent=Math.hypot(head.spread,height*.5)+.18;
         if(Math.abs(dot(offset,right))>depth*horizontal+extent*horizontalMargin
           || Math.abs(dot(offset,up))>depth*vertical+extent*verticalMargin) continue;
+        if(distance<13) for(let i=0;i<9;i++) {
+          const jet=drops[i], pulse=.72+.21*Math.sin(active*26+i*2.4);
+          const drift=head.spread*.29, reach=drift*pulse*.68;
+          cloud.push(x+jet.x*reach,y-height*(.075+i*.006)*pulse,z+jet.z*reach,.76,.88,.97,.51*pulse,.024,
+            jet.x*drift*7,-height*2.1,jet.z*drift*7,1);
+        }
         for(let i=0;i<drops.length;i+=distance>13 ? 3 : 1) {
           const drop=drops[i], elapsed=active-drop.start;
           if(elapsed<0) continue;
           const phase=elapsed%(drop.fall+.17), t=Math.min(phase/drop.fall,1);
-          const reach=head.spread*t*(1.23-.23*t);
+          const reach=head.spread*t*(1.36-.36*t);
           const px=x+drop.x*reach,pz=z+drop.z*reach;
           if(t<1) {
-            const py=y-height*t*(.48+.52*t), speed=height*(.48+1.04*t)/drop.fall;
-            const drift=head.spread*(1.23-.46*t)/drop.fall;
-            cloud.push(px,py,pz,.71,.84,.95,drop.alpha,drop.size,drop.x*drift,-speed,drop.z*drift,1);
-          } else if(i%3===0) {
+            const py=y-height*t*(.62+.38*t), speed=height*(.62+.76*t)/drop.fall;
+            const drift=head.spread*(1.36-.72*t)/drop.fall;
+            cloud.push(px,py,pz,.75,.86,.97,drop.alpha,drop.size*(t<.25 ? 1.26 : 1),drop.x*drift,-speed,drop.z*drift,1);
+            if(distance<13 && i%8===0 && t>.24) {
+              cloud.push(px,py+.03,pz,.78,.87,.94,drop.alpha*.20,.13+t*.13,0,0,0,2);
+            }
+          } else if(i%2===0) {
             const splash=(phase-drop.fall)/.17;
-            const py=head.bottom+.095*splash*(1-splash)*4;
-            cloud.push(px+drop.x*splash*.065,py,pz+drop.z*splash*.065,
-              .80,.90,.97,drop.alpha*(1-splash)*.59,drop.size*.91,0,0,0,0);
+            const py=head.bottom+.12*splash*(1-splash)*4+.012;
+            cloud.push(px+drop.x*splash*.14,py,pz+drop.z*splash*.14,
+              .81,.90,.98,drop.alpha*(1-splash)*.72,drop.size*.95,drop.x*.8,.64*(1-2*splash),drop.z*.8,1);
           }
         }
       }
@@ -456,12 +471,13 @@
     const {at}=site;
     const puffs=[];
     for(const [kind,count,delay,life,force,size] of [
-      [0,37,.24,[.51,1.24],[3.6,12.6],[.51,1.68]],
-      [1,56,.81,[4.2,9.2],[2.4,6.6],[.77,2.42]],
-      [2,30,.38,[1.55,5.6],[3.8,9.4],[.52,1.52]]
+      [0,40,.14,[.39,1.14],[4.5,14.8],[.68,1.77]],
+      [1,52,.61,[4.1,9.2],[2.2,6.1],[1.02,2.50]],
+      [2,32,.31,[1.55,5.6],[4.5,10.4],[.52,1.52]],
+      [4,49,.17,[.45,1.38],[6.2,21],[.021,.054]]
     ]) for(let i=0;i<count;i++) {
       const turn=rng()*Math.PI*2, spread=mix(...force,rng()), seed=rng();
-      const rise=kind===2 ? mix(-.28,.71,rng()) : mix(.64,kind===1 ? 3.51 : 6.22,rng());
+      const rise=kind===2 ? mix(-.28,.71,rng()) : mix(.64,kind===1 ? 3.51 : kind===4 ? 10.8 : 6.22,rng());
       const velocity=[Math.cos(turn)*spread,rise,Math.sin(turn)*spread];
       const origin=plus(at,[Math.cos(turn)*seed*.46,kind===2 ? -.48 : (rng()-.42)*.79,Math.sin(turn)*seed*.46]);
       puffs.push({kind,origin,velocity,start:time+rng()*delay,life:mix(...life,rng()),size:mix(...size,rng()),seed});
@@ -492,7 +508,7 @@
     for(const event of bursts) {
       const offset=minus(event.at,cam.at), distance=Math.hypot(...offset), age=time-event.time;
       if(distance>108) continue;
-      const flash=(1-smooth(.035,.43,age))*(event.flash??1.13);
+      const flash=(1-smooth(.018,.145,age))*(event.flash??1.13)+.28*(1-smooth(.06,.54,age));
       if(flash>0) {
         const facing=distance<.8 ? 1 : smooth(-.35,.63,dot(offset,cam.forward)/distance);
         exposure=Math.max(exposure,flash*(1-smooth(2,38,distance))*mix(.32,1,facing));
@@ -502,11 +518,14 @@
         const age=time-puff.start, t=age/puff.life;
         if(t<0 || t>=1) continue;
         const {kind,origin,velocity,seed}=puff;
-        const drift=(1-Math.exp(-age*(kind===0 ? 2.0 : .90)))/(kind===0 ? 2.0 : .90);
+        const resistance=kind===0 ? 2.0 : .90;
+        const drift=(1-Math.exp(-age*resistance))/resistance;
         const at=plus(origin,times(velocity,drift));
-        at[1]+=kind===1 ? age*.47 : 0;
-        const size=puff.size*mix(kind===0 ? .63 : .45,kind===0 ? 2.2 : 2.62,smooth(0,.83,t));
-        const alpha=smooth(0,kind===0 ? .066 : .14,t)*(1-smooth(.35,1,t))*(kind===2 ? .48 : .84);
+        at[1]+=kind===1 ? age*.53 : kind===4 ? -3.4*age*age : 0;
+        if(kind===4 && at[1]<origin[1]-.66) continue;
+        const size=puff.size*(kind===4 ? mix(1,.54,t)
+          : mix(kind===0 ? .70 : .41,kind===0 ? 2.48 : 2.73,smooth(0,.83,t)));
+        const alpha=smooth(0,kind===4 ? .023 : kind===0 ? .061 : .14,t)*(1-smooth(.38,1,t))*(kind===2 ? .48 : .87);
         const depth=dot(minus(at,cam.at),cam.forward);
         if(depth>-size) visible.push({at,alpha,size,seed,kind,t,depth});
       }

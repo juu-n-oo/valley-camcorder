@@ -368,7 +368,7 @@ namespace ValleyCamcorder
                 if(remnant) remnant.transform.rotation=item.transform.rotation;
                 var outlet=ValleyManifest.Point(spec.leakAt);
                 var direction=ValleyManifest.Point(spec.leakVelocity);
-                var water=Particles(outlet,"Damaged pipe spray",tint,true,.47f,1.43f,.018f,.065f,
+                var water=AtmosphereParticles(outlet,"Damaged pipe spray",ParticleLook.Drop,true,.47f,1.43f,.018f,.065f,
                     direction.magnitude*.79f,direction.magnitude*1.38f,1.15f,new Color(.67f,.86f,.94f,.86f),90);
                 water.transform.rotation=Quaternion.LookRotation(direction);
                 Pipe("pipe-water",outlet,water.transform,.71f);
@@ -382,18 +382,8 @@ namespace ValleyCamcorder
             var radius=site.radius;
             StartFireResponse(site);
             Cue("blast",at,1);
-            var flash=Create("Blast flash",at);
-            var light=flash.gameObject.AddComponent<Light>();
-            light.color=new Color(1,.65f,.23f);
-            light.range=radius;
-            light.intensity=7.5f;
-            Destroy(flash.gameObject,.24f);
-            var spark=Particles(at,"Blast flash and embers",tint,false,.38f,1.45f,.09f,.54f,5,radius*.65f,.54f,
-                new Color(1,.49f,.13f));
-            spark.Emit(57);
-            var smoke=Particles(at,"Blast smoke and dust",tint,false,2,4,.65f,2.2f,1.8f,radius*.27f,-.18f,
-                new Color(.26f,.22f,.18f,.64f));
-            smoke.Emit(44);
+            BlastAtmosphere(at,radius);
+            player.Water.BlastSplash(at);
             foreach(var id in site.collapse) Collapse(indexed[id],at,9);
             foreach(var breach in site.breaches)
             {
@@ -453,7 +443,7 @@ namespace ValleyCamcorder
             var p=item.transform.position+Vector3.up*.16f;
             ParticleSystem flame=null;
             if(visible)
-                flame=Particles(p,"Burning timber",tint,true,.21f,.66f,.09f,.27f,.5f,2,-.2f,new Color(1,.31f,.065f),22);
+                flame=FireParticles(p,"Burning timber",item.kind=="woodStair" ? .88f : .69f,.94f);
             var delay=item.kind=="woodStair" ? Random.Range(8.0f,11.0f) : Random.Range(10.0f,14.0f);
             Scorch(item.gameObject,new Color(.49f,.34f,.21f));
             var time=Time.time+delay;
@@ -466,7 +456,7 @@ namespace ValleyCamcorder
                 }
                 yield return null;
             }
-            if(flame) {flame.Stop();Destroy(flame.gameObject,1.1f);}
+            StopFire(flame);
             if(item && item.gameObject.activeSelf) Collapse(item,p,4,visible);
         }
 
