@@ -20,7 +20,7 @@ def _finish(slot,paint=None):
     attribute.layer_name=SEDAN_TINT
     links.new(attribute.outputs["Color"],principled.inputs["Base Color"])
     rough,metallic={
-        "carPaint":(.20,.18),"carGlass":(.070,0),"carLens":(.23,.07),"carMetal":(.245,.81),
+        "carPaint":(.19,.18),"carGlass":(.070,0),"carLens":(.165,.08),"carMetal":(.235,.81),
         "carWood":(.23,0),"carLeather":(.47,0),"carTire":(.79,0),"fabric":(.91,0),
         "gloss":(.38,.08),"plain":(.64,0)
     }.get(slot,(.53,0))
@@ -30,7 +30,7 @@ def _finish(slot,paint=None):
         principled.inputs["Specular IOR Level"].default_value=.28
     if slot in ("carPaint","carWood","carLens","carGlass"):
         principled.inputs["Coat Weight"].default_value=.92 if slot=="carPaint" else .35
-        principled.inputs["Coat Roughness"].default_value=.078 if slot=="carPaint" else .15
+        principled.inputs["Coat Roughness"].default_value=.067 if slot=="carPaint" else .13
     if slot=="carPaint":
         variant=SEDAN_PAINTS[paint or "Obsidian black"]
         mat.diffuse_color=(*map(_linear,variant),1)

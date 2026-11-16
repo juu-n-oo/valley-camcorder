@@ -17,7 +17,7 @@ def _wheel_models():
             a=tau*i/count
             s=abs(x)/.10
             ribs=(.5+.5*cos(a*42+5.4*s-2.1*s*s))**9
-            radius=r-.0042*ribs*tread
+            radius=r-.0017*ribs*tread
             points.append((x,cos(a)*radius,sin(a)*radius))
         shape.append(points)
     def rubber(p):
@@ -26,7 +26,7 @@ def _wheel_models():
         r=sqrt(y*y+z*z)
         tread=(.5+.5*cos(a*42+abs(x)*47))**11
         stain=.97+.072*sin(a*47)+.067*smooth(.269,.319,r)-.22*tread*(1-smooth(.082,.107,abs(x)))
-        return tone(rgb(0x262727),stain)
+        return tone(rgb(0x222323),stain)
     rows_mesh(tire,"carTire","Molded directional tread and curved sidewalls",shape+[shape[0]],rubber,caps=False,
               uv=lambda p:(atan2(p[2],p[1])/(tau)+.50,p[0]*4+.5))
     for x,r,w in ((.126,.227,.0010),(.128,.275,.0011),(.115,.287,.0008)):
@@ -57,35 +57,51 @@ def _wheel_models():
           rgb(0x737570),48,axis="x")
     _pill(wheel,"plain","Cast brake caliper",(.089,.090,-.079),.109,.049,.051,rgb(0x625c4d),"x",.58)
 
-    # The photo shows seven flowing spokes around a four-lug hub.
+    # The seven openings and the four counterbores belong to one cast wheel face.
+    windows=[]
+    window_shape=_outline([(.102,0),(.109,-.012),(.129,-.030),(.154,-.045),(.173,-.044),
+                           (.182,-.029),(.186,0),(.182,.029),(.173,.044),(.154,.045),
+                           (.129,.030),(.109,.012)],4)
     for i in range(7):
-        angle=tau*i/7
-        rings=[]
-        for x,r,width,sweep in ((.146,.039,.447,0),(.147,.065,.442,.014),(.146,.088,.364,.032),
-                                (.136,.120,.283,.041),(.129,.152,.233,.044),(.128,.171,.231,.033),
-                                (.136,.192,.270,.018),(.139,.199,.286,.005)):
-            ring=[]
-            for t in _range(8):
-                phi=angle+(2*t-1)*width+sweep
-                ring.append((x-.014*abs(2*t-1)**2.4,r*cos(phi),r*sin(phi)))
-            rings.append(ring)
-        spoke=rows_mesh(wheel,"carMetal","Sculpted alloy spoke",rings,alloy,ring=False,caps=False)
-        thick=spoke.modifiers.new("Cast thickness","SOLIDIFY")
-        thick.thickness=.009
-        apply(spoke,thick)
-        bevel(spoke,.003,2)
+        angle=tau*(i+.50)/7+.095
+        c,s=cos(angle),sin(angle)
+        window=[(c*r-s*t,s*r+c*t) for r,t in window_shape]
+        windows.append((window,(c*.158,s*.158)))
+    bolt_circle=[(.052*cos(tau*(i+.09)/4),.052*sin(tau*(i+.09)/4)) for i in range(4)]
+    counterbore=_elliptic(.031,.031,1,32)
+    outer=_elliptic(.389,.389,1,112)
+    bores=[_offset_outline(counterbore,center) for center in bolt_circle]
+    samples=[(0,0)]+[(r*cos(a),r*sin(a)) for r in (.021,.036,.074,.088,.112,.143,.170,.189)
+                     for a in (tau*i/98 for i in range(98))]
 
-    lathe(wheel,"carMetal","Sculpted four-lug center",
-          [(.124,.080,.080),(.143,.079,.079),(.151,.065,.065),(.151,.030,.030)],alloy,54,axis="x")
-    lathe(wheel,"plain","Black pressed center cap",[(.150,.024,.024),(.153,.024,.024),(.156,.022,.022)],
-          rgb(0x404241),30,axis="x")
-    for i in range(4):
-        a=tau*(i+.055)/4
-        where=(0,.047*cos(a),.047*sin(a))
-        lathe(wheel,"plain","Lug counterbore",[(.149,.011,.011),(.153,.012,.012),(.154,.010,.010)],
-              rgb(0x454742),16,where,"x")
-        lathe(wheel,"carMetal","Hex wheel nut",[(.154,.007,.007),(.158,.0065,.0065),(.163,.0045,.0045)],
-              rgb(0xaeb0a5),6,where,"x")
+    def face(y,z,inset=0):
+        r=sqrt(y*y+z*z)
+        x=.144+.011*(1-(r/.195)**1.25)+.0028*exp(-((r-.105)/.038)**2)
+        return x+inset,y,z
+
+    _perforated_surface(wheel,"carMetal","Continuous cast seven-spoke wheel face",outer,
+                        [*(window for window,_ in windows),*bores],samples,face,alloy)
+    for outline,(cy,cz) in windows:
+        def wall(y,z,scale,depth):
+            return face(blend(cy,y,scale),blend(cz,z,scale),depth)
+        rows_mesh(wheel,"carMetal","Rounded alloy window wall",
+                  [[wall(y,z,scale,depth) for y,z in outline]
+                   for scale,depth in ((1,0),(.966,-.003),(.914,-.009),(.855,-.018),(.841,-.024))],
+                  rgb(0xb2b8b4),caps=False)
+    lathe(wheel,"carMetal","Center cap bright ring",[(.151,.027,.027),(.157,.027,.027),(.159,.024,.024)],
+          rgb(0x98958a),48,axis="x",caps=False)
+    lathe(wheel,"plain","Inset center cap",[(.154,.024,.024),(.157,.023,.023),(.158,.021,.021)],
+          rgb(0x303232),48,axis="x")
+    for cy,cz in bolt_circle:
+        def seat(y,z,depth):
+            return face(cy+y,cz+z,depth)
+        _bezel(wheel,"carMetal","Machined recess for lug nut",counterbore,seat,
+               [(1,0),(.970,-.003),(.808,-.011),(.759,-.024)],rgb(0x777a72))
+        where=(0,cy,cz)
+        lathe(wheel,"plain","Shadow inside lug bore",[(.126,.013,.013),(.132,.012,.012)],
+              rgb(0x302f29),24,where,"x")
+        lathe(wheel,"carMetal","Recessed hex wheel nut",[(.128,.008,.008),(.143,.0075,.0075),(.147,.0055,.0055)],
+              rgb(0xb9b4a5),6,where,"x")
     valve=(.138,-.163,.047)
     _cord(wheel,"plain","Rubber tire valve stem",[valve,(.151,-.155,.048),( .165,-.149,.041)],.005,SEDAN_RUBBER)
     _pill(wheel,"carMetal","Valve tip",(.165,-.149,.041),.007,.008,.008,rgb(0x6d7068),"x")

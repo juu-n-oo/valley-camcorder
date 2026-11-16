@@ -73,10 +73,12 @@ test('Sonata lenses keep their front amber corner and separate red rear sections
       if (r > .49 && b > .56) clear++;
       if (r > .55 && g > .44 && b < .27) amber++;
     }
-    let bottom=Infinity, top=-Infinity;
-    for (let i = 1; i < rear.length; i += 11) {
-      bottom=Math.min(bottom,rear[i]);
-      top=Math.max(top,rear[i]);
+    let bottom=Infinity, top=-Infinity, inner=Infinity, outer=-Infinity;
+    for (let i = 0; i < rear.length; i += 11) {
+      bottom=Math.min(bottom,rear[i+1]);
+      top=Math.max(top,rear[i+1]);
+      inner=Math.min(inner,Math.abs(rear[i]));
+      outer=Math.max(outer,Math.abs(rear[i]));
     }
     for (let i = 0; i < rear.length; i += 11) {
       const height=(rear[i+1]-bottom)/(top-bottom);
@@ -88,7 +90,8 @@ test('Sonata lenses keep their front amber corner and separate red rear sections
         if (isRed) red++;
         if (isClear || isAmber) misplaced++;
       }
-      if (height < .23) {
+      const width=(Math.abs(rear[i])-inner)/(outer-inner);
+      if (height > .05 && height < .23 && width > .10 && width < .86) {
         if (isClear) reverse++;
         if (isAmber) indicator++;
         if (isRed) misplaced++;
@@ -98,4 +101,34 @@ test('Sonata lenses keep their front amber corner and separate red rear sections
     assert.ok(red > 100 && misplaced === 0, side);
     assert.ok(reverse > 30 && indicator > 50, side);
   }
+});
+
+function covers({vertices,indices}, axes, point, minimumDepth) {
+  const [u,v,depth] = axes;
+  const [x,y] = point;
+  const edge = (a,b) => (vertices[b+u]-vertices[a+u])*(y-vertices[a+v]) -
+      (vertices[b+v]-vertices[a+v])*(x-vertices[a+u]);
+  for (let i=0; i<indices.length; i+=3) {
+    const a=indices[i]*11, b=indices[i+1]*11, c=indices[i+2]*11;
+    if (Math.min(vertices[a+depth],vertices[b+depth],vertices[c+depth])<minimumDepth) continue;
+    const ab=edge(a,b), bc=edge(b,c), ca=edge(c,a);
+    if (Math.abs(ab+bc+ca)<1e-10) continue;
+    if (Math.min(ab,bc,ca)>=-1e-9 || Math.max(ab,bc,ca)<=1e-9) return true;
+  }
+  return false;
+}
+
+test('Sonata grille, fog lamps and cast wheel have modeled openings', () => {
+  const shell=assets.get('sedan_body_shell').parts;
+  const body=shell.find(part=>part.slot==='carPaint').shape;
+  for (const sample of [[.11,.628],[0,.322],[-.596,.331],[.596,.331]]) {
+    assert.equal(covers(body,[0,1,2],sample,1.93),false,sample.join(', '));
+  }
+  assert.ok(covers(body,[0,1,2],[.404,.463],1.93));
+  const duct=shell.find(part=>part.slot==='plain').shape;
+  assert.equal(covers(duct,[0,1,2],[.078,.644],2.12),false);
+  const wheel=assets.get('sedan_hub').parts.find(part=>part.slot==='carMetal').shape;
+  const angle=Math.PI/7+.095;
+  assert.equal(covers(wheel,[1,2,0],[.158*Math.cos(angle),.158*Math.sin(angle)],.137),false);
+  assert.ok(covers(wheel,[1,2,0],[.155*Math.cos(.095),.155*Math.sin(.095)],.137));
 });

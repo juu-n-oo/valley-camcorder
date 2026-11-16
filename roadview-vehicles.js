@@ -211,7 +211,8 @@
       const {x,z,yaw,color}=site, at=[x,height(x,z)+(site.lot ? .030 : .014),z];
       const car={scene,yaw,color,at,matrix:transform(at,0,yaw),paint:rgb(color),parts:[],accessories:[],locked:true,moving:false};
       scene.vehicles.push(car);
-      const body=part(car,"carBody",asset(color+" shell",p=>shell(p,m,car.paint,signs),{ray:[m.carPaint],dent:true}));
+      const body=part(car,"carBody",asset(color+" shell",p=>shell(p,m,car.paint,signs),
+        {ray:[m.carPaint,m.plain,m.carMetal,m.carLens],dent:true}));
       box(car,body,[0,.182,-.101],[1.679,.083,2.47],{kind:"rock",follow:false});
       for(const front of [true,false]) {
         const side=front ? 1 : -1;
