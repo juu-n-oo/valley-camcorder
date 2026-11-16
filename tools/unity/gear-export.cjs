@@ -66,7 +66,7 @@ const motor = {powered:true,position:1,angle:0,switching:null};
 const stages = values => values.map(([time,sound])=>({time,sound})).sort((a,b)=>a.time-b.time);
 const axisPoint = ([x,y,z]) => [x,y,-z];
 
-function createGear(kind, model, shell, mounted, grip, cartView, cap, speed, drag, reach) {
+function createGear(kind, model, shell, mounted, contacts, cartView, cap, speed, drag, reach) {
   const slotCount = model.carCount;
   const magazine = cartView ? [...cartView.opaque.filter(part=>!toy.cars.includes(part.mesh) &&
     !toy.spiral.cars.includes(part.mesh)),cartView.glass] : [];
@@ -150,20 +150,27 @@ function createGear(kind, model, shell, mounted, grip, cartView, cap, speed, dra
     slots.push(...held.opaque.filter(part=>toy.cars.includes(part.mesh)).map(part=>pose(part.matrix)));
   }
   return {kind,capacity:slotCount,shell:shell.map(id),cap:id(cap),clips,
-    muzzle:axisPoint(model.muzzle),railStart:model.railStart ? axisPoint(model.railStart) : null,
-    grip,speed,drag,reach,scale:model.carScale??1.47,
+    muzzle:axisPoint(model.muzzle),railStart:axisPoint(model.railStart??contacts.track),
+    grip:axisPoint(contacts.right),supportGrip:contacts.left ? axisPoint(contacts.left) : null,
+    trigger:axisPoint(contacts.trigger),shoulderRoom:contacts.shoulderRoom??0,
+    speed,drag,reach,scale:model.carScale??1.47,
     looseCars:(kind==="smg" ? toy.spiral.cars : toy.cars).map(id),
     magazine:magazine.map(part=>({mesh:id(part.mesh),at:pose(part.matrix)})),slots:slots.flat()};
 }
 
 const model = toy.rifle, spool = toy.spiral;
+// Palm contacts sit on the outside of each molded handle. Track coordinates
+// use the centerline through the booster and the exposed exit, in model space.
 const gears = [
   createGear("rifle",rifle,[model.body,model.door,model.beltSwitch,model.button,model.track],long,
-    [.023,-.157,-.049],null,null,90.4,.0034,92),
+    {right:[.044,-.157,.058],left:[-.044,-.166,-.547],trigger:[.023,-.089,.004],
+      track:[0,.017,-1.179],shoulderRoom:.205},null,null,90.4,.0034,92),
   createGear("pistol",launcher,[toy.body,toy.trigger,toy.drive,toy.powerSwitch,toy.shaft],pistol,
-    [.029,-.135,-.029],launcher.cartridgeParts(toy,identity,colors,0),toy.cartridge.cap,35.6,.0089,34),
+    {right:[.044,-.138,.058],trigger:[.015,-.076,-.032],track:[0,.010,-.425]},
+    launcher.cartridgeParts(toy,identity,colors,0),toy.cartridge.cap,35.6,.0089,34),
   createGear("smg",spiral,[spool.body,spool.socket,spool.release,spool.trigger,spool.boost,spool.coupling],smg,
-    [.025,-.179,-.032],spiral.magazineParts(spool,identity,smg),spool.cap,66.5,.0056,0)
+    {right:[.044,-.172,.063],left:[-.046,-.177,-.590],trigger:[.024,-.104,-.004],shoulderRoom:.272},
+    spiral.magazineParts(spool,identity,smg),spool.cap,66.5,.0056,58)
 ];
 
 const {meshes:asset} = V.blenderAssets;

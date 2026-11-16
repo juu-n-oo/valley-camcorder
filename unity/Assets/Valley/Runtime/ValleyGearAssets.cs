@@ -66,8 +66,8 @@ namespace ValleyCamcorder
             public string kind;
             public int capacity,cap;
             public int[] shell,looseCars;
-            public float speed,drag,reach,scale;
-            public float[] grip,muzzle,railStart,slots;
+            public float speed,drag,reach,scale,shoulderRoom;
+            public float[] grip,muzzle,railStart,slots,supportGrip,trigger;
             public Part[] magazine;
             public Clip[] clips;
 

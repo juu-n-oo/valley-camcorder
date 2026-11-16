@@ -10,7 +10,6 @@ const read=name=>fs.readFileSync(path.join(root,name),"utf8");
 const source=read("game.js");
 const synth=source.slice(source.indexOf("  class Sound {"),source.indexOf("  const audio = new Sound()"));
 const clips=[
-  ["shot-pistol","release",[]],["shot-rifle","release",[true]],["shot-smg","spiralRelease",[]],
   ["draw","gearChange",["draw",false]],["stow","gearChange",["stow",false]],
   ["rifle-draw","gearChange",["draw",true]],["rifle-stow","gearChange",["stow",true]],
   ["tap","magazineTap",[]],["power","switchClick",[]],["smg-latch","spiralLatch",["index"]],
@@ -35,10 +34,6 @@ const clips=[
     [event,"reload",[event,false]],["rifle-"+event,"reload",[event,true]]
   ]),
   ...["door","fridge","valve","faucet","light","burner","window"].map(kind=>["use-"+kind,"fixture",[kind,true]]),
-  ["motor-pistol",[["motor",true,true,false],["beltMotor",true,true,false]],4.5],
-  ["motor-rifle",[["motor",true,true,true],["beltMotor",true,true,true]],4.5],
-  ["motor-smg",[["spiralDrive",true,true,true]],4.5],
-  ["motor-smg-test",[["spiralDrive",false,true,false]],4.5],
   ["underwater",[["submerged",.35]],4.5],["tap-water",[["runningTap",1]],4.5],
   ["pipe-water",[["runningLeak",1,0]],4.5],
   ["venue-alarm",[["fireSystem",{alarm:{level:1,pan:0},spray:{level:0,pan:0}}]],6.0,2.45],
@@ -55,17 +50,90 @@ function wav(samples, rate) {
   return wav;
 }
 
+const drives={
+  "motor-pistol":[164,31,1],
+  "motor-rifle":[126,24,.92],
+  "motor-smg":[210,36,.82],
+  "motor-smg-test":[171,29,.75]
+};
+const strikes={
+  "shot-pistol":[1.08,.19],
+  "shot-rifle":[.83,.29],
+  "shot-smg":[1.19,.23]
+};
+
+const tau=Math.PI*2;
+function motorLoop(rate, drive) {
+  const samples=new Float64Array(rate);
+  for(let i=0;i<samples.length;i++) {
+    const t=i/rate;
+    const sine=(hz,phase=0)=>Math.sin(tau*hz*t+phase);
+    if(!drive) {
+      // A light modulation makes the high harmonics sound like a spinning
+      // rotor. Unity drives the pitch and volume throughout the spin-up.
+      const modulation=.23*sine(71)+.09*sine(131);
+      samples[i]=(.83+.12*sine(155))*(.53*sine(1156,modulation)+
+        .23*sine(2312,modulation*2)+.12*sine(3468)+.062*sine(4660)+.035*sine(5750));
+    } else {
+      const [gear,rollers,body]=drive;
+      const phase=(t*rollers)%1;
+      const tooth=(1-Math.exp(-phase*140))*Math.exp(-phase*9);
+      samples[i]=(.66+.28*sine(rollers))*(body*.54*sine(gear)+.18*sine(gear*2)+.092*sine(gear*3))+
+        tooth*(.23*sine(gear*4)+.15*sine(1724)+.065*sine(2827));
+    }
+  }
+  return samples;
+}
+
+function metalRelease(rate,[pitch,duration]) {
+  const samples=new Float64Array(Math.round(rate*duration));
+  let seed=827461, low=0,mid=0;
+  const bodies=[[117,.43,23],[346,.23,31],[728,.14,34],[1428,.16,48],[2624,.093,62],[3546,.071,54]];
+  for(let i=0;i<samples.length;i++) {
+    const t=i/rate;
+    seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+    const noise=seed/2147483648-1;
+    low+=.059*(noise-low);
+    mid+=.47*(noise-mid);
+    for(const [at,weight] of [[0,1],[.012,.62],[.029,.39]]) {
+      const age=t-at;
+      if(age<0) continue;
+      const transient=(.58*(mid-low)+.24*(noise-mid))*Math.exp(-age*84);
+      let ring=0;
+      for(const [frequency,strength,decay] of bodies)
+        ring+=strength*Math.sin(tau*frequency*pitch*age)*Math.exp(-age*decay);
+      samples[i]+=weight*(transient+ring)*Math.min(1,age*1420);
+    }
+    samples[i]=Math.tanh(samples[i]*1.56)*(1-Math.pow(t/duration,7));
+  }
+  return samples;
+}
+
+function writeCrafted(name,samples,rate,ceiling) {
+  let peak=0;
+  for(const sample of samples) peak=Math.max(peak,Math.abs(sample));
+  for(let i=0;i<samples.length;i++) samples[i]*=ceiling/peak;
+  fs.writeFileSync(path.join(folder,name+".wav"),wav(samples,rate));
+}
+
 async function exportSounds() {
+  const requested=new Set(process.argv.slice(2));
+  const selected=name=>!requested.size || requested.has(name);
+  const rate=24000;
+  fs.mkdirSync(folder,{recursive:true});
+  if(selected("booster")) writeCrafted("booster",motorLoop(rate),rate,.69);
+  for(const [name,drive] of Object.entries(drives))
+    if(selected(name)) writeCrafted(name,motorLoop(rate,drive),rate,.62);
+  for(const [name,strike] of Object.entries(strikes))
+    if(selected(name)) writeCrafted(name,metalRelease(rate,strike),rate,.82);
+  const selection=clips.filter(([name])=>selected(name));
+  if(!selection.length) return;
   const executablePath=process.env.VALLEY_CHROMIUM;
   const browser=await chromium.launch({headless:true,executablePath});
-  const rate=24000;
-  const requested=new Set(process.argv.slice(2));
-  const selection=clips.filter(([name])=>!requested.size || requested.has(name));
   try {
     const page=await browser.newPage();
     await page.addScriptTag({content:read("render.js")+"\nglobalThis.Valley = Valley;"});
     await page.addScriptTag({content:"const {random,clamp,mix,smooth}=Valley;\n"+synth+"\nglobalThis.ValleySound=Sound;"});
-    fs.mkdirSync(folder,{recursive:true});
     for(const [name,method,args,loopSeconds=3] of selection) {
       const looping=Array.isArray(method);
       const samples=await page.evaluate(async ({method,args,looping,rate})=>{

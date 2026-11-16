@@ -281,6 +281,15 @@ namespace ValleyCamcorder
             player.Step(1/60f,new ValleyPlayer.Controls {range=true});
             if(!player.InRange || player.MarkedCount!=0) return "F did not start a fresh range round";
             Advance(player,.28f);
+            if(FindObjectsByType<MeshRenderer>().Any(item=>item.name=="Mini-car being loaded"))
+                return "A spare loading mesh was visible on the pistol";
+            if(!player.sound.HasCue("booster")) return "The booster was missing from the Unity audio set";
+            var reticle=gear.ReticleOffset;
+            Advance(player,.21f);
+            if((reticle-gear.ReticleOffset).sqrMagnitude<.000000001f || gear.ReticleOffset.magnitude>.00351f)
+                return "The hip reticle did not drift within its small screen range";
+            if(Vector3.Distance(gear.Grip,player.hands.right.PalmContact)>.022f)
+                return "The right palm did not touch the pistol grip";
             var hip=player.view.fieldOfView;
             player.Step(1/60f,new ValleyPlayer.Controls {aim=true});
             Advance(player,.31f);
@@ -294,9 +303,27 @@ namespace ValleyCamcorder
             if(gear.Shots!=0 || gear.Ammo!=5 || player.sound.LastCue!="jam") return "Unpowered pistol launched a car";
             player.Step(1/60f,new ValleyPlayer.Controls {motor=true});
             Advance(player,.73f);
+            var beforeShots=gear.Shots;
+            var fingers=player.hands.right.model.GetComponentsInChildren<Transform>(true);
+            var index=fingers.First(joint=>joint.name.StartsWith("Index") && joint.name.EndsWith("02"));
+            var middle=fingers.First(joint=>joint.name.StartsWith("Middle") && joint.name.EndsWith("02"));
+            var indexAtRest=index.localRotation;
+            var middleAtRest=middle.localRotation;
             player.Step(1/60f,new ValleyPlayer.Controls {trigger=true,triggerHeld=true});
-            Advance(player,.85f,new ValleyPlayer.Controls {triggerHeld=true});
+            Advance(player,.075f,new ValleyPlayer.Controls {triggerHeld=true});
+            if(gear.Shots!=beforeShots || player.sound.BoosterCharge<.35f || player.sound.FeederCue!=null)
+                return "The booster did not rise before the belt and release";
+            Advance(player,.102f,new ValleyPlayer.Controls {triggerHeld=true});
+            if(!gear.CarOnTrack || player.sound.FeederCue!="motor-pistol" || player.sound.BoosterCharge<.92f)
+                return "The pistol did not feed its leading mini-car at the top of the spin-up";
+            if(Quaternion.Angle(index.localRotation,indexAtRest)<5 || Quaternion.Angle(middle.localRotation,middleAtRest)>2)
+                return "The index finger did not move independently of the grip";
+            Capture(player.view,"valley-pistol-track.png");
+            Advance(player,.70f,new ValleyPlayer.Controls {triggerHeld=true});
             if(gear.Ammo!=0 || gear.Shots!=5 || player.sound.LastCue!="shot-pistol") return "Pistol trigger or sound failed";
+            if(Vector3.Angle(gear.LastLaunch,gear.LastRailHeading)>.03f ||
+                Vector3.Dot(gear.LastLaunch,player.view.transform.up)<-.013f)
+                return "The pistol launched downwards off its visible channel";
             player.Step(1/60f,new ValleyPlayer.Controls {reload=true,reloadHeld=true});
             Advance(player,3.04f);
             if(gear.Ammo!=5 || gear.Discarded!=1 || player.sound.LastCue!="seat") return "Empty pistol cartridge did not reload and eject";
@@ -304,6 +331,10 @@ namespace ValleyCamcorder
             player.Step(1/60f,new ValleyPlayer.Controls {slot=1});
             Advance(player,.63f);
             if(gear.Selected!=1 || gear.Ammo!=6 || gear.Reserve!=18) return "Rifle switch or inventory failed";
+            Capture(player.view,"valley-rifle-grip.png");
+            if(gear.SupportHand is not ValleyHandContact rifleGrip ||
+                Vector3.Distance(rifleGrip.Point,player.hands.left.PalmContact)>.022f)
+                return $"The rifle support palm missed the front handle by {Vector3.Distance(gear.SupportHand?.Point??Vector3.zero,player.hands.left.PalmContact):0.000} m";
             player.Step(1/60f,new ValleyPlayer.Controls {trigger=true});
             Advance(player,.25f);
             if(gear.Ammo!=5 || player.sound.LastCue!="shot-rifle") return "Rifle shot did not fire";
@@ -318,10 +349,15 @@ namespace ValleyCamcorder
             player.Step(1/60f,new ValleyPlayer.Controls {slot=3});
             Advance(player,.63f);
             if(gear.Selected!=3 || gear.Ammo!=20 || gear.Total!=56) return "SMG switch or capacity failed";
+            Capture(player.view,"valley-smg-grip.png");
+            if(gear.SupportHand is not ValleyHandContact smgGrip ||
+                Vector3.Distance(smgGrip.Point,player.hands.left.PalmContact)>.022f)
+                return $"The SMG support palm missed the front handle by {Vector3.Distance(gear.SupportHand?.Point??Vector3.zero,player.hands.left.PalmContact):0.000} m";
             player.Step(1/60f,new ValleyPlayer.Controls {trigger=true});
-            Advance(player,.14f);
+            Advance(player,.245f);
             if(gear.Ammo!=19 || player.sound.LastCue!="shot-smg" ||
-                Vector3.Angle(gear.LastLaunch,gear.LastRailHeading)>.03f || Vector3.Angle(gear.LastLaunch,player.view.transform.forward)<2)
+                Vector3.Angle(gear.LastLaunch,gear.LastRailHeading)>.03f ||
+                Vector3.Dot(gear.LastLaunch,player.view.transform.up)<-.013f)
                 return "SMG hip fire did not exit along its visible rail";
             var mounted=gear.Magazine.localPosition;
             player.Step(1/60f,new ValleyPlayer.Controls {inspect=true});

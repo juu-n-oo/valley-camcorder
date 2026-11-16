@@ -8,6 +8,7 @@ namespace ValleyCamcorder
         enum Motion { Flight, Sink, Rest }
         const int Mask=Physics.DefaultRaycastLayers;
         const float MaximumStep=.009f, RestLifetime=30;
+        internal const float AirGravity=7.2f;
         float drag,startSpeed,age,distance,soundAt;
         Vector3 at,previous,velocity,spin,restOffset;
         Transform support;
@@ -91,7 +92,7 @@ namespace ValleyCamcorder
             var speed=velocity.magnitude;
             var below=player.world.Map.RiverAbove(at);
             var resistance=below ? speed*.036f+3.95f : speed*drag;
-            var nextVelocity=velocity*Mathf.Exp(-resistance*dt)-Vector3.up*(below ? 3.9f : 7.2f)*dt;
+            var nextVelocity=velocity*Mathf.Exp(-resistance*dt)-Vector3.up*(below ? 3.9f : AirGravity)*dt;
             var delta=(velocity+nextVelocity)*(.5f*dt);
             var span=delta.magnitude;
             var contact=Physics.Raycast(at,delta,out var hit,span,Mask,QueryTriggerInteraction.Ignore);

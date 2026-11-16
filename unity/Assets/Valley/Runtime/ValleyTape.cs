@@ -157,8 +157,11 @@ namespace ValleyCamcorder
             Label(d,"AUG 18 '01",stamp);
             d.y+=height*.051f;
             Label(d,TapeClock(seconds),stamp);
-            if(gear.Visible && !gear.Aiming && !gear.Busy && !player.Rewinding && !player.Incapacitated)
-                Reticle(frame.center,height);
+            if(gear.ShowReticle && !player.Rewinding && !player.Incapacitated)
+            {
+                var offset=gear.ReticleOffset;
+                Reticle(frame.center+new Vector2(offset.x*width,-offset.y*height),height);
+            }
         }
 
         internal static string TapeClock(int seconds)

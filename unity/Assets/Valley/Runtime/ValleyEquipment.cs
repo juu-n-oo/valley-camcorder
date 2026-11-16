@@ -9,11 +9,13 @@ namespace ValleyCamcorder
     public sealed class ValleyEquipment
     {
         const int RootPose=0, SupportPose=1, CartridgePose=2, CapPose=3, HandCarPose=4, ShellPose=5;
-        const float ViewScale=.56f, PartLifetime=30, Slot=.086f, ElevatorStep=.051f, ExitStart=.70f;
+        const float ViewScale=.56f, PartLifetime=30, Slot=.086f, ElevatorStep=.051f;
+        const float PistolExit=.33f, RifleExit=.62f, SmgExit=.70f;
         const int Rifle=0, Pistol=1, Smg=2;
         static readonly string[] Labels={"1 RIFLE","2 PISTOL","3 SMG"};
         static readonly int[] RifleOrder={5,0,1,2,3,4};
-        static readonly float[] FeedTime={.105f,.125f,.078f}, StartTime={.025f,.025f,.018f};
+        static readonly float[] FeedTime={.105f,.115f,.081f}, StartTime={.132f,.147f,.119f};
+        static readonly float[] BoosterPitch={.97f,1,1.08f};
 
         sealed class Cartridge
         {
@@ -46,7 +48,7 @@ namespace ValleyCamcorder
             public Cartridge loaded;
             public GameObject onGround;
             public int reserve, nextCar;
-            public float belt;
+            public float belt,boosterAngle;
         }
 
         readonly Launcher[] launchers;
@@ -59,6 +61,11 @@ namespace ValleyCamcorder
         readonly List<GameObject> launched=new();
         int selected=Pistol, pending=-1, shots, dropped, rifleBatch;
         float draw, aim, actionTime, cycleTime, cycleStart, leftInFrame, press, kick, swayX,swayY,clock;
+        float boostCharge;
+        Vector2 reticleOffset;
+        Vector3 trackStart,trackExit,trackHeading;
+        Ray sightRay;
+        RaycastHit? nearObstruction;
         bool aiming, cycle, warm, queueReload, testing, power=true, jammed, emptyRifle, aimAfterClose, waitForRelease;
         string notice;
         float noticeUntil;
@@ -89,8 +96,12 @@ namespace ValleyCamcorder
         public bool Busy => action!=null || cycle || pending>=0;
         public string Action => action?.name ?? "";
         public bool Visible => draw>.075f && Current.root.gameObject.activeInHierarchy;
-        public Vector3 Grip => Current.root.TransformPoint(ValleyGearAssets.Point(Current.model.grip));
-        public Vector3? Support { get; private set; }
+        public Vector3 Grip => MainHand.Point;
+        internal ValleyHandContact MainHand => MoldedGrip(Current,Current.model.grip,1,
+            Current.root.TransformPoint(ValleyGearAssets.Point(Current.model.trigger)-Vector3.forward*(press*.0045f)));
+        internal ValleyHandContact? SupportHand { get; private set; }
+        internal Vector2 ReticleOffset => reticleOffset;
+        internal bool ShowReticle => Visible && !Aiming && action==null && pending<0;
         public float Draw => draw;
         public string Notice => clock<noticeUntil ? notice : "";
         public int Shots => shots;
@@ -107,6 +118,7 @@ namespace ValleyCamcorder
         public Vector3 LastLaunch { get; private set; }
         public Vector3 LastMuzzle { get; private set; }
         public Vector3 LastRailHeading { get; private set; }
+        internal bool CarOnTrack => Current.railCar.gameObject.activeInHierarchy;
         public Transform Magazine => Current.magazine;
         public bool InspectionMotor => testing;
         public bool CanAct => draw>.68f && pending<0 && !Current.onGround;
@@ -143,8 +155,13 @@ namespace ValleyCamcorder
             gear.slots=new Transform[model.capacity];
             for(int i=0;i<gear.slots.Length;i++)
                 gear.slots[i]=Assets.NewPart(model.looseCars[0],gear.cart.Length>0 ? gear.magazine : gear.root,"Loaded mini-car");
-            gear.handCar=Assets.NewPart(Assets.Data.carIds[0],gear.root,"Mini-car being loaded");
+            if(model.kind=="rifle")
+            {
+                gear.handCar=Assets.NewPart(Assets.Data.carIds[0],gear.root,"Mini-car being loaded");
+                gear.handCar.gameObject.SetActive(false);
+            }
             gear.railCar=Assets.NewPart(Assets.Data.carIds[0],gear.root,"Mini-car on orange track");
+            gear.railCar.gameObject.SetActive(false);
             gear.root.gameObject.SetActive(false);
             return gear;
         }
@@ -174,7 +191,8 @@ namespace ValleyCamcorder
             incoming=outgoing=null;
             closingFrom=null;
             CastSwing=0;
-            sound.Mechanism(null);
+            boostCharge=0;
+            sound.StopLauncherMotors();
         }
 
         public bool Take(ValleyFixture item)
@@ -405,7 +423,7 @@ namespace ValleyCamcorder
                 if((selected!=Pistol || !jammed) && (Ammo>0 || triggerDown))
                 {
                     cycle=true;
-                    cycleStart=warm || !power && selected==Pistol ? 0 : StartTime[selected];
+                    cycleStart=warm || !power && selected==Pistol || Ammo==0 ? 0 : StartTime[selected];
                     cycleTime=warm ? leftInFrame : 0;
                 }
                 warm=false;
@@ -421,6 +439,21 @@ namespace ValleyCamcorder
             kick*=Mathf.Exp(-dt*18);
             swayX=Mathf.Lerp(swayX,Mathf.Clamp(lookX,-.085f,.085f),1-Mathf.Exp(-dt*13));
             swayY=Mathf.Lerp(swayY,Mathf.Clamp(lookY,-.07f,.07f),1-Mathf.Exp(-dt*13));
+            var drift=new Vector2(Mathf.Sin(clock*2.31f)*.0015f-swayX*.019f,
+                Mathf.Sin(clock*2.68f+.7f)*.0019f+Mathf.Sin(stride)*.00045f+swayY*.022f);
+            reticleOffset=Vector2.Lerp(reticleOffset,Vector2.ClampMagnitude(drift,.0035f)*(1-aim*.81f),1-Mathf.Exp(-dt*23));
+            var viewRay=camera.ViewportPointToRay(new Vector3(.5f+reticleOffset.x,.5f+reticleOffset.y,0));
+            sightRay=new Ray(camera.transform.position,viewRay.direction);
+
+            var whine=cycle && !jam && Ammo>0;
+            var charge=whine ? cycleStart>0 ? Mathf.SmoothStep(.04f,.92f,cycleTime/cycleStart)+.08f*progress : .91f+.09f*progress : 0;
+            boostCharge=whine ? Mathf.Clamp01(charge) : Mathf.MoveTowards(boostCharge,0,dt*7.5f);
+            var loadingBelt=Action.StartsWith("belt",StringComparison.Ordinal) && actionTime>.185f && actionTime<.337f;
+            var feeding=cycle && cycleTime>=cycleStart;
+            var feeder=testing && selected==Smg ? "motor-smg-test" :
+                testing || loadingBelt || feeding ? "motor-"+Current.model.kind : null;
+            sound.LauncherMotors(feeder,testing || loadingBelt ? .43f : jam ? .67f : .59f,boostCharge,BoosterPitch[selected],dt);
+            Current.boosterAngle=(Current.boosterAngle+dt*(620+boostCharge*3800)*boostCharge)%360;
             Render(progress,jam,stride);
             if(cycle && progress>=1)
             {
@@ -438,18 +471,15 @@ namespace ValleyCamcorder
                     if(car>=0)
                     {
                         Launch(car);
-                        Current.belt+=Slot;
                         kick=selected==Pistol ? 1 : selected==Rifle ? .45f : .25f;
                     }
+                    Current.belt+=Slot;
+                    Current.railCar.gameObject.SetActive(false);
                     warm=Ammo>0 && (triggerHeld || car<0);
                 }
                 if(Ammo==0) Message(Reserve>0 ? "R  RELOAD" : "OUT OF MINICARS");
                 if(queueReload) {queueReload=false; Reload();}
             }
-            bool loadingBelt=Action.StartsWith("belt",StringComparison.Ordinal) && actionTime>.185f && actionTime<.337f;
-            var loop=testing && selected==Smg ? "motor-smg-test" : loadingBelt ? "motor-rifle" :
-                testing || cycle && (selected!=Pistol || power) ? "motor-"+Current.model.kind : null;
-            sound.Mechanism(loop);
         }
 
         bool RifleLoading => selected==Rifle && (Action is "open" or "gather" ||
@@ -475,7 +505,7 @@ namespace ValleyCamcorder
             if(draw<=.025f)
             {
                 gear.root.gameObject.SetActive(false);
-                Support=null;
+                SupportHand=null;
                 return;
             }
             var root=Frame(RootPose,progress,jam);
@@ -484,23 +514,78 @@ namespace ValleyCamcorder
             var shift=new Vector3((-swayX+Mathf.Sin(stride*.51f)*.016f)*quiet+away*.12f,
                 (swayY+Mathf.Cos(stride)*.008f)*quiet-kick*.024f-away*.74f,-kick*.084f-away*.04f);
             shift+=new Vector3(CastSwing*.084f,CastSwing*.12f,CastSwing*.23f);
+            shift.z-=gear.model.shoulderRoom*Mathf.Lerp(1,.37f,aim);
+            shift.x-=gear.model.shoulderRoom*.58f*(1-aim)*(action==null ? 1 : .26f);
             new Pose(root.at+shift,root.turn*Quaternion.Euler(-kick*4.6f+away*13-CastSwing*29,
                 swayX*18*quiet+CastSwing*12,CastSwing*17)).Apply(gear.root);
+            if(action==null && Mathf.Abs(CastSwing)<.005f)
+            {
+                AlignTrack(gear);
+                FitForegrip(gear);
+            }
+            else ReadTrack(gear);
             var palm=Frame(SupportPose,progress,jam);
-            Support=palm.scale>.035f ? gear.root.TransformPoint(palm.at) : null;
+            SupportHand=SupportContact(gear,palm);
             for(int i=0;i<gear.shell.Length;i++)
             {
                 var frame=Frame(ShellPose+i,progress,jam);
                 if(selected==Pistol && i==3 && action==null && !power)
                     frame=new Pose(new Vector3(-.026f,frame.at.y,frame.at.z),frame.turn);
+                if(selected==Pistol && i==2)
+                    frame=new Pose(frame.at,Quaternion.AngleAxis(-gear.boosterAngle,Vector3.right));
+                if(selected==Pistol && i==4 && action==null)
+                {
+                    var feed=jammed ? .28f : jam ? progress*.28f : progress;
+                    frame=new Pose(frame.at,PistolRoller(gear,feed));
+                }
                 frame.Apply(gear.shell[i]);
             }
             var showing=incoming!=null && Action!="" && actionTime>=PocketTime() ? incoming : gear.loaded;
             if(showing.removed) gear.magazine.gameObject.SetActive(false);
             else Frame(CartridgePose,progress,jam).Apply(gear.magazine);
             if(gear.cap) Frame(CapPose,progress,jam).Apply(gear.cap);
-            if(selected==Rifle) RenderRifle(gear,progress,jam);
+            if(selected==Rifle) RenderRifle(gear);
             else RenderCartridge(gear,showing,progress,jam);
+            RenderTrackCar(gear,showing,progress,jam);
+        }
+
+        static ValleyHandContact MoldedGrip(Launcher gear,float[] local,float side,Vector3? indexPad=null)
+        {
+            var root=gear.root;
+            return new ValleyHandContact(root.TransformPoint(ValleyGearAssets.Point(local)),
+                Quaternion.LookRotation(root.forward-root.up*.13f-root.right*side*.16f,
+                    -root.right*side+root.up*.055f),1,true,indexPad);
+        }
+
+        void FitForegrip(Launcher gear)
+        {
+            if(gear.model.supportGrip?.Length!=3) return;
+            for(int i=0;i<2;i++)
+            {
+                var grip=MoldedGrip(gear,gear.model.supportGrip,-1);
+                var shift=owner.hands.left.GripReachCorrection(camera.transform,grip);
+                if(shift.sqrMagnitude<.000001f) break;
+                gear.root.position+=Vector3.ClampMagnitude(shift,.085f);
+                AlignTrack(gear);
+            }
+        }
+
+        ValleyHandContact? SupportContact(Launcher gear,Pose palm)
+        {
+            var model=gear.model;
+            var ready=model.supportGrip?.Length==3;
+            var grip=ready ? MoldedGrip(gear,model.supportGrip,-1) : default;
+            if(action==null) return ready ? grip : null;
+            var root=gear.root;
+            // The authored left-hand contact follows the cartridge or its latch
+            // while it is moving. Blend back into the stationary foregrip at the ends.
+            var authored=new ValleyHandContact(root.TransformPoint(palm.at),
+                root.rotation*palm.turn*Quaternion.Euler(-12,-23,72),palm.scale,false);
+            var transition=Mathf.SmoothStep(0,1,Mathf.Min(actionTime,action.duration-actionTime)/.19f);
+            if(!ready) return palm.scale>.015f ? authored : null;
+            if(palm.scale<=.015f) return grip;
+            return new ValleyHandContact(Vector3.Lerp(grip.Point,authored.Point,transition),
+                Quaternion.Slerp(grip.Rotation,authored.Rotation,transition),1,transition<.50f);
         }
 
         float PocketTime()
@@ -509,7 +594,7 @@ namespace ValleyCamcorder
             return float.PositiveInfinity;
         }
 
-        void RenderRifle(Launcher gear,float progress,bool jam)
+        void RenderRifle(Launcher gear)
         {
             var hatchOpen=gear.shell[1].localPosition.z>.006f;
             for(int i=0;i<gear.slots.Length;i++)
@@ -522,11 +607,10 @@ namespace ValleyCamcorder
                     new Pose(gear.model.slots,i*Pose.Width).Apply(node);
                 }
             }
-            var hand=Frame(HandCarPose,progress,jam);
+            var hand=Frame(HandCarPose,0,false);
             if(hand.scale>.001f)
                 Assets.ChangeMesh(gear.handCar.GetComponent<MeshFilter>(),Assets.Data.carIds[RifleOrder[gear.nextCar%6]]);
             hand.Apply(gear.handCar);
-            gear.railCar.gameObject.SetActive(false);
         }
 
         void RenderCartridge(Launcher gear,Cartridge cart,float progress,bool jam)
@@ -539,45 +623,91 @@ namespace ValleyCamcorder
                 var part=new Pose(gear.model.magazine[i].at);
                 if(selected==Smg && i==1) part=new Pose(part.at,part.turn*Quaternion.Euler(0,lift*360,0));
                 if(selected==Pistol && i>=2 && i<gear.cart.Length-1)
-                    part=new Pose(part.at,part.turn*Quaternion.Euler((gear.belt+progress*Slot)/.0154f*Mathf.Rad2Deg,0,0));
+                    part=new Pose(part.at,part.turn*PistolRoller(gear,progress));
                 part.Apply(gear.cart[i]);
             }
             for(int i=0;i<gear.slots.Length;i++)
             {
                 int color=i<cart.cars.Count ? cart.cars[i] : -1;
-                bool rail=selected==Smg && i==0 && lift>=ExitStart;
+                bool rail=i==0 && cycle && !jam && (selected==Smg ? lift>=SmgExit : progress>=PistolExit);
                 var node=gear.slots[i];
                 node.gameObject.SetActive(color>=0 && !rail);
                 if(!node.gameObject.activeSelf) continue;
                 var part=new Pose(gear.model.slots,i*Pose.Width);
-                var offset=selected==Smg ? Vector3.up*lift*ElevatorStep : Vector3.forward*(progress*Slot+
-                    (i==0 && !jam && !jammed ? Mathf.SmoothStep(0,.20f,Mathf.InverseLerp(.28f,1,progress)) : 0));
+                var offset=selected==Smg ? Vector3.up*lift*ElevatorStep : Vector3.forward*(progress*Slot);
                 Assets.ChangeMesh(node.GetComponent<MeshFilter>(),gear.model.looseCars[color]);
                 new Pose(part.at+offset,part.turn,part.scale).Apply(node);
             }
-            var onRail=selected==Smg && lift>=ExitStart && cart.cars.Count>0 && cart.cars[0]>=0;
+        }
+
+        static Quaternion PistolRoller(Launcher gear,float feed)
+            => Quaternion.AngleAxis((gear.belt+feed*Slot)/.0154f*Mathf.Rad2Deg,Vector3.right);
+
+        void RenderTrackCar(Launcher gear,Cartridge cart,float progress,bool jam)
+        {
+            var enter=selected==Smg ? SmgExit : selected==Rifle ? RifleExit : PistolExit;
+            var onRail=cycle && !jam && !jammed && progress>=enter && cart.cars.Count>0 && cart.cars[0]>=0;
             gear.railCar.gameObject.SetActive(onRail);
             if(!onRail) return;
-            var travel=Mathf.InverseLerp(ExitStart,1,lift);
-            var at=Vector3.Lerp(ValleyGearAssets.Point(gear.model.railStart),ValleyGearAssets.Point(gear.model.muzzle),travel*travel);
+            var travel=Mathf.InverseLerp(enter,1,progress);
+            var at=Vector3.Lerp(ValleyGearAssets.Point(gear.model.railStart),ValleyGearAssets.Point(gear.model.muzzle),
+                travel*travel);
             Assets.ChangeMesh(gear.railCar.GetComponent<MeshFilter>(),Assets.Data.carIds[cart.cars[0]]);
-            new Pose(at,Quaternion.identity,gear.model.scale).Apply(gear.railCar);
+            var size=selected==Pistol ? Mathf.Lerp(1,gear.model.scale,travel) : gear.model.scale;
+            new Pose(at,Quaternion.identity,size).Apply(gear.railCar);
+        }
+
+        void ReadTrack(Launcher gear)
+        {
+            trackStart=gear.root.TransformPoint(ValleyGearAssets.Point(gear.model.railStart));
+            trackExit=gear.root.TransformPoint(ValleyGearAssets.Point(gear.model.muzzle));
+            trackHeading=(trackExit-trackStart).normalized;
+        }
+
+        void AlignTrack(Launcher gear)
+        {
+            ReadTrack(gear);
+            nearObstruction=null;
+            var distance=gear.model.reach;
+            var ahead=Vector3.Dot(trackExit-sightRay.origin,sightRay.direction);
+            if(Physics.Raycast(sightRay,out var hit,distance,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore))
+            {
+                if(hit.distance<=ahead+.11f) nearObstruction=hit;
+                else if(hit.distance>ahead+.50f) distance=hit.distance;
+            }
+            var focus=sightRay.GetPoint(distance);
+            if(!owner.Underwater)
+            {
+                var length=Vector3.Distance(trackExit,focus);
+                var drag=gear.model.drag;
+                var seconds=Mathf.Min(.58f,(Mathf.Exp(drag*length)-1)/(drag*gear.model.speed));
+                focus.y+=.5f*ValleyToyCar.AirGravity*seconds*seconds;
+            }
+            // The muzzle follows the visible track. Rotate about the rear grip so
+            // the controls remain planted in the hand while convergence changes.
+            var pivot=gear.root.TransformPoint(ValleyGearAssets.Point(gear.model.grip));
+            for(int i=0;i<3;i++)
+            {
+                var direction=(focus-trackExit).normalized;
+                var steer=Quaternion.FromToRotation(trackHeading,direction);
+                gear.root.SetPositionAndRotation(pivot+steer*(gear.root.position-pivot),steer*gear.root.rotation);
+                ReadTrack(gear);
+            }
         }
 
         void Launch(int color)
         {
             var gear=Current;
-            var head=camera.transform;
-            var muzzle=gear.root.TransformPoint(ValleyGearAssets.Point(gear.model.muzzle));
-            var start=selected==Smg ? gear.root.TransformPoint(ValleyGearAssets.Point(gear.model.railStart)) : head.position;
-            var heading=selected==Smg ? (muzzle-start).normalized : (AimPoint(gear,head,muzzle)-muzzle).normalized;
-            LastMuzzle=muzzle;
-            LastLaunch=heading;
-            LastRailHeading=selected==Smg ? (muzzle-start).normalized : Vector3.zero;
+            LastMuzzle=trackExit;
+            LastLaunch=LastRailHeading=trackHeading;
             shots++;
-            sound.Cue("shot-"+gear.model.kind);
-            var projectile=SpawnProjectile(color,muzzle,heading*gear.model.speed,gear.model.drag,gear.model.scale,false);
-            if(Line(head.position,start,out var hit) || Line(start,muzzle,out hit)) projectile.Obstructed(hit);
+            sound.Cue("shot-"+gear.model.kind,.89f);
+            var projectile=SpawnProjectile(color,trackExit,trackHeading*gear.model.speed,gear.model.drag,
+                gear.railCar.lossyScale.x,false);
+            if(Line(camera.transform.position,trackStart,out var hit) || Line(trackStart,trackExit,out hit))
+                projectile.Obstructed(hit);
+            else if(nearObstruction is RaycastHit obstruction)
+                projectile.Obstructed(obstruction);
         }
 
         internal ValleyToyCar SpawnProjectile(int color,Vector3 at,Vector3 velocity,float drag,float scale,bool opponent)
@@ -591,14 +721,6 @@ namespace ValleyCamcorder
             if(launched.Count>=50) {Object.Destroy(launched[0]); launched.RemoveAt(0);}
             launched.Add(car.gameObject);
             return projectile;
-        }
-
-        static Vector3 AimPoint(Launcher gear,Transform head,Vector3 muzzle)
-        {
-            var target=head.position+head.forward*gear.model.reach;
-            if(Line(head.position,target,out var hit) &&
-                hit.distance>Vector3.Dot(muzzle-head.position,head.forward)+.10f) target=hit.point;
-            return target;
         }
 
         static bool Line(Vector3 from,Vector3 to,out RaycastHit hit)

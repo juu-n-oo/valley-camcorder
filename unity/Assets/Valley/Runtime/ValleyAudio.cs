@@ -12,9 +12,9 @@ namespace ValleyCamcorder
         readonly Dictionary<string,List<AudioClip>> banks = new();
         readonly Dictionary<string,List<AudioClip>> worldCues=new();
         readonly Dictionary<string,AudioClip> effects=new();
-        AudioSource steps, breath, falls, cues, mechanism, resupply, depth;
-        AudioLowPassFilter cueFilter, motorFilter, fallsFilter;
-        float mechanismTarget, depthTarget;
+        AudioSource steps, breath, falls, cues, mechanism, booster, resupply, depth;
+        AudioLowPassFilter cueFilter, motorFilter, boosterFilter, fallsFilter;
+        float mechanismTarget, boosterTarget, depthTarget;
         float fatigue, distance, nextBreath, brushDistance;
         bool hadEffort;
         AudioClip previous;
@@ -22,6 +22,8 @@ namespace ValleyCamcorder
         public string LastWorldCue { get; private set; }
         public string SearchBank { get; private set; }
         public bool HasCue(string name) => effects.ContainsKey(name);
+        internal float BoosterCharge { get; private set; }
+        internal string FeederCue { get; private set; }
 
         void Awake()
         {
@@ -42,13 +44,16 @@ namespace ValleyCamcorder
                 clips.Add(clip);
             }
             cues=Source("Toy effects");
-            mechanism=Source("Toy motor");
+            mechanism=Source("Toy feeder motor");
+            booster=Source("Toy booster motor");
             cueFilter=cues.gameObject.AddComponent<AudioLowPassFilter>();
             motorFilter=mechanism.gameObject.AddComponent<AudioLowPassFilter>();
+            boosterFilter=booster.gameObject.AddComponent<AudioLowPassFilter>();
             resupply=Source("Resupply recordings");
             depth=Source("Underwater sound");
-            depth.loop=mechanism.loop=true;
-            depth.volume=mechanism.volume=0;
+            depth.loop=mechanism.loop=booster.loop=true;
+            depth.volume=mechanism.volume=booster.volume=0;
+            if(effects.TryGetValue("booster",out var rotor)) booster.clip=rotor;
             if(effects.TryGetValue("underwater",out var underwater)) depth.clip=underwater;
             falls=new GameObject("Waterfall audio").AddComponent<AudioSource>();
             falls.transform.SetParent(transform,false);
@@ -69,10 +74,9 @@ namespace ValleyCamcorder
             falls.transform.position=at;
             var range=Vector3.Distance(at,listener.position);
             falls.volume=.62f*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(5,74,range)))*(1-.82f*depthTarget);
-            Fade(mechanism,mechanismTarget,Time.deltaTime);
             Fade(depth,depthTarget,Time.deltaTime);
             var cutoff=Mathf.Lerp(22000,610,Mathf.SmoothStep(0,1,depth.volume/.47f));
-            cueFilter.cutoffFrequency=motorFilter.cutoffFrequency=fallsFilter.cutoffFrequency=cutoff;
+            cueFilter.cutoffFrequency=motorFilter.cutoffFrequency=boosterFilter.cutoffFrequency=fallsFilter.cutoffFrequency=cutoff;
         }
 
         AudioSource Source(string name)
@@ -99,15 +103,33 @@ namespace ValleyCamcorder
             cues.PlayOneShot(clip,volume);
         }
 
-        public void Mechanism(string name)
+        public void LauncherMotors(string feeder,float feedLevel,float charge,float pitch,float dt)
         {
-            mechanismTarget=name!=null && effects.TryGetValue(name,out _) ? .69f : 0;
-            if(mechanismTarget>0 && mechanism.clip!=effects[name])
+            FeederCue=feeder;
+            mechanismTarget=0;
+            if(feeder!=null && effects.TryGetValue(feeder,out var belt))
             {
-                mechanism.Stop();
-                mechanism.clip=effects[name];
-                mechanism.volume=0;
+                mechanismTarget=feedLevel;
+                if(mechanism.clip!=belt)
+                {
+                    mechanism.Stop();
+                    mechanism.clip=belt;
+                    mechanism.volume=0;
+                }
             }
+            BoosterCharge=Mathf.Clamp01(charge);
+            boosterTarget=charge>0 ? Mathf.Lerp(.10f,.62f,Mathf.Pow(BoosterCharge,1.55f)) : 0;
+            if(charge>0) booster.pitch=Mathf.Lerp(.40f,1.34f,BoosterCharge)*pitch;
+            Fade(mechanism,mechanismTarget,dt);
+            Fade(booster,boosterTarget,dt*1.65f);
+        }
+
+        public void StopLauncherMotors()
+        {
+            LauncherMotors(null,0,0,1,0);
+            booster.Stop();
+            mechanism.Stop();
+            booster.volume=mechanism.volume=0;
         }
 
         public void WorldCue(string key,Vector3 at,float volume)
