@@ -11,10 +11,7 @@ import bpy
 
 ROOT = Path(__file__).resolve().parent
 OPEN = ((2, 4, 2), (3, 5, 3), (5, 6, 4), (6, 9, 5))
-FIST = ((69, 90, 52), (75, 94, 59), (77, 95, 61), (77, 95, 61))
-SQUEEZE = ((72, 93, 54), (78, 97, 60), (80, 98, 62), (79, 98, 63))
 THUMB_OPEN = (-7, -4, -12)
-THUMB_TUCKED = (36, 10, 23)
 COUNTS = (
     (40, 53, 5, (2, 1, -2), -3),
     (61, 75, 4, (1, -1, -1), 3),
@@ -24,44 +21,44 @@ COUNTS = (
 )
 
 
-def hand_keys():
+def hand_keys(study):
+    fist = study["FIST_BENDS"]
     yield 1, "Relax", ((8, 17, 8), (11, 23, 11), (14, 27, 15), (19, 31, 18)), (27, 5, 5), (13, 10), (-4, 0, 3), -6
-    yield 9, None, ((32, 49, 32), (37, 54, 37), (43, 62, 44), (52, 65, 45)), (33, 9, 11), (13, 13), (3, 1, 2), 3
-    yield 19, "Clench", FIST, (34, 12, 23), (14, 15), (10, 2, 0), 8
-    yield 27, "Squeeze", SQUEEZE, (35, 12, 24), (16, 18), (12, 2, -1), 11
-    yield 33, "Open", ((40, 63, 35), (48, 65, 37), (53, 72, 43), (58, 75, 45)), (26, 5, 1), (12, 13), (7, 1, -2), 5
+    yield 9, None, ((32, 49, 32), (37, 54, 37), (43, 62, 44), (52, 65, 45)), (35, 0, 8), (24, 32), (3, 1, 2), 3
+    yield 19, "Clench", fist, *study["FIST_THUMB"], (10, 2, 0), 8
+    yield 27, "Squeeze", fist, *study["FIST_THUMB"], (12, 2, -1), 11
+    yield 33, "Open", ((40, 63, 35), (48, 65, 37), (53, 72, 43), (58, 75, 45)), (30, -17, -9), (30, 47), (7, 1, -2), 5
     for first, last, number, wrist, roll in COUNTS:
         extended = min(number, 4)
-        fingers = OPEN[:extended] + FIST[extended:]
-        thumb = THUMB_OPEN if number == 5 else THUMB_TUCKED
-        hinges = (4, 7) if number == 5 else (24, 17)
+        fingers = OPEN[:extended] + fist[extended:]
+        if number == 3:
+            # The little finger closes against the palm before its neighbours.
+            fingers = (*fingers[:3], (61, 109, 59))
+        if number == 5:
+            thumb, hinges = THUMB_OPEN, (4, 7)
+        else:
+            thumb, hinges = study["FIST_THUMB" if number == 1 else "TUCKED_THUMB"]
         yield first, str(number), fingers, thumb, hinges, wrist, roll
         eased = tuple((a-.8, b-1, c) if i < extended else (a+1, b+1.6, c+1)
                        for i, (a, b, c) in enumerate(fingers))
+        if number == 3:
+            eased = (*eased[:3], fingers[3])
         yield last, None, eased, thumb, hinges, (wrist[0]-.8, wrist[1], wrist[2]+.7), roll+.9
 
 
-def animate(scene, rig, fingers):
+def animate(scene, rig, study):
     # Keep the driven thumb mechanics and give the count its own action.
     animation = rig.animation_data
     animation.action.use_fake_user = True
     animation.action = None
     bones = rig.pose.bones
     scene.timeline_markers.clear()
-    for frame, label, bends, thumb, hinges, wrist, roll in hand_keys():
+    for frame, label, bends, thumb, hinges, wrist, roll in hand_keys(study):
         if label:
             scene.timeline_markers.new(label, frame=frame)
-        motion = sum(row[0] for row in bends) / 320
         bones["Forearm"].rotation_euler = (0, math.radians(roll), 0)
         bones["Wrist"].rotation_euler = tuple(map(math.radians, wrist))
-        bones["Palm"].rotation_euler = (math.radians(2.6*motion), 0, 0)
-        for i, (finger, bend) in enumerate(zip(fingers, bends)):
-            spread = (i-1.24) * 4.7 * (1-bend[0]/88)
-            bones[f"{finger.name}.Metacarpal"].rotation_euler = (
-                math.radians((i/3)**1.5*10.8*motion), 0, math.radians(.26*spread))
-            for j, name in enumerate(finger.joints):
-                bones[name].rotation_euler = (math.radians(bend[j]), 0,
-                                              math.radians(spread) if j == 0 else 0)
+        study["pose_fingers"](rig, bends, spread=4.7)
         bones["Thumb.Base"].rotation_euler = tuple(map(math.radians, thumb))
         for name, degrees in zip(("Thumb.MCP", "Thumb.IP"), hinges):
             bones[name].rotation_euler = (math.radians(degrees), 0, 0)
@@ -122,7 +119,7 @@ def main():
     for obj in (left, *left.children_recursive):
         obj.hide_render = True
         obj.hide_set(True)
-    animate(scene, right, study["FINGERS"][:4])
+    animate(scene, right, study)
     camera_for_count(scene, study["aim_object"])
     verify_counts(scene, right, study["FINGERS"][:4])
     study["validate"](skin, right, left, scene)

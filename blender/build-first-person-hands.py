@@ -224,13 +224,17 @@ def sculpt(collection):
             (-.031,.067,.0045,.0098,.0075,.0096),
             (-.029,.077,.0007,.0068,.0049,.0077),
         ), collection,sides=32),
+        # Start the saddle inside the palm so its end cap cannot appear as a
+        # step on the back of the thumb when the skin bends.
         volume("Thumb-index web saddle", (
-            (.041,.051,.0005,.0089,.0057,.0052),
-            (.046,.059,.0008,.0083,.0051,.0047),
-            (.046,.066,.0006,.0077,.0046,.0041),
-            (.043,.073,.0001,.0069,.0041,.0037),
-            (.039,.080,-.0004,.0060,.0036,.0035),
-            (.033,.087,-.0008,.0038,.0025,.0029),
+            (.025,.026,-.0027,.0041,.0040,.0042),
+            (.033,.037,-.0021,.0076,.0050,.0080),
+            (.039,.048,-.0017,.0092,.0060,.0093),
+            (.044,.057,-.0008,.0091,.0055,.0071),
+            (.046,.065,.0003,.0080,.0046,.0050),
+            (.043,.073,.0000,.0069,.0041,.0037),
+            (.039,.080,-.0005,.0060,.0036,.0034),
+            (.033,.087,-.0010,.0038,.0025,.0029),
         ), collection,samples=5,sides=40),
         thumb_volume(collection),
     ]
@@ -260,7 +264,7 @@ def sculpt(collection):
     for vertex in palm.data.vertices:
         p = vertex.co
         web = gaussian(p.y-.090,.015)*.72
-        thenar = gaussian(p.x-.042,.016)*gaussian(p.y-.061,.023)*.98
+        thenar = gaussian(p.x-.043,.018)*gaussian(p.y-.057,.025)
         index_root = gaussian(p.x-.034,.009)*gaussian(p.y-.091,.010)
         blend_junctions.add([vertex.index],max(web,thenar,index_root),"REPLACE")
     blend = palm.modifiers.new("Blend the palm pads and webbing", "SMOOTH")
@@ -498,7 +502,7 @@ def make_rig(collection, side):
     steer_thumb(rig,side)
     tissue.is_visible = False
     rig["Joint convention"] = "Local X is flexion. The thumb CMC also rotates and opposes on Y and Z."
-    rig["Pose review"] = "Frames 28, 39 and 49 show the thumb hinges. Frames 80, 112 and 148 show contact poses."
+    rig["Pose review"] = "Frames 39 and 49 show the thumb hinges. Frame 80 shows the fist and frame 95 shows a palm tuck."
     return rig
 
 
@@ -787,6 +791,14 @@ def mirrored(original, rig, collection):
     return left
 
 
+FIST_BENDS = ((69,90,52),(75,94,59),(77,95,61),(77,95,61))
+FIST_THUMB = ((46.5,-27.1,-22.5),(29.4,66.2))
+TUCKED_THUMB = ((33,-33,-12),(68,79))
+FIST_METACARPAL_YAW = (4,1,-1.5,-6.25)
+FIST_METACARPAL_CUP = (7.5,6.54,6.51,10.59)
+FIST_KNUCKLE_YAW = (-8.5,-5,-3.25,1.25)
+
+
 POSES = (
     (1,"Relaxed",((8,17,8),(11,23,11),(14,27,15),(19,31,18)),(27,5,5),(13,10),(-6,0,4),-13),
     (28,"Open",((1,2,1),(2,4,2),(4,6,4),(6,10,5)),(-7,-4,-12),(4,7),(2,0,-2),-2),
@@ -794,10 +806,12 @@ POSES = (
     (49,"Thumb tip curls",((3,5,2),(5,7,3),(8,11,6),(12,15,8)),(-3,-2,-10),(35,46),(5,1,-4),16),
     (54,"Thumb lifts",((7,12,7),(10,18,9),(16,23,12),(20,29,16)),(22,5,-4),(31,35),(6,1,-3),21),
     (59,"Thumb turns in",((11,25,13),(17,34,20),(26,45,24),(36,54,31)),(34,11,15),(29,27),(7,2,-2),23),
-    (69,"Fingers close",((55,76,43),(66,84,49),(70,90,56),(73,90,57)),(38,15,22),(24,21),(10,3,1),31),
-    (80,"Closed hand",((69,90,52),(75,94,59),(77,95,61),(77,95,61)),(34,12,23),(14,15),(11,3,2),34),
-    (87,"Thumb releases",((48,67,38),(58,76,44),(63,81,49),(66,85,54)),(35,10,8),(17,17),(7,3,0),31),
-    (95,"Open to reach",((19,30,14),(24,40,19),(31,50,24),(39,58,35)),(31,9,8),(16,14),(0,2,-2),19),
+    (69,"Fingers close",((55,76,43),(66,84,49),(70,90,56),(73,90,57)),(47,-8,-8),(23,34),(10,3,1),19),
+    (80,"Closed fist",FIST_BENDS,*FIST_THUMB,(11,3,2),12),
+    (86,"Squeeze",FIST_BENDS,*FIST_THUMB,(12,4,1),10),
+    (95,"Thumb folds across palm",((3,4,2),(3,5,3),(5,5,4),(7,8,5)),*TUCKED_THUMB,(1,2,-2),7),
+    (100,"Hold thumb fold",((3,4,2),(3,5,3),(5,5,4),(7,8,5)),*TUCKED_THUMB,(0,1,-2),4),
+    (104,"Thumb leaves palm",((4,5,3),(4,6,4),(6,7,5),(9,11,6)),(33,-23,-9),(48,57),(-1,2,-3),6),
     (112,"Pinch",((72.5,20,33.5),(29,63,25),(39,69,34),(47,73,41)),(38,-1.5,15),(9,7),(-7,3,-4),8),
     (126,"Pinch holds",((72.5,20,33.5),(29,63,25),(39,69,34),(47,73,41)),(38,-1.5,15),(9,7),(-8,2,-4),-7),
     (148,"Rounded grip",((42,61,27),(46,68,29),(50,73,35),(55,76,38)),(35,12,16),(28,25),(6,-3,2),-17),
@@ -806,8 +820,25 @@ POSES = (
 )
 
 
+def pose_fingers(rig, bends, side=1, spread=2.2, pinch=False):
+    cup = sum(bend[0] for bend in bends)/304
+    rig.pose.bones["Palm"].rotation_euler.x = math.radians(cup*2.6)
+    for i,(spec,bend) in enumerate(zip(FINGERS[:4],bends)):
+        clench = 0 if pinch else smooth(22,69,bend[0])
+        splay = (i-1.24)*spread*(1-clamp(cup))
+        meta = rig.pose.bones[f"{spec.name}.Metacarpal"]
+        meta.rotation_euler = (
+            math.radians(mix((i/3)**1.5*10.8*cup,FIST_METACARPAL_CUP[i],clench)),
+            0,
+            math.radians(mix(splay*.26,FIST_METACARPAL_YAW[i],clench)*side),
+        )
+        yaw = 15 if pinch and not i else mix(splay,FIST_KNUCKLE_YAW[i],clench)
+        for j,name in enumerate(spec.joints):
+            rig.pose.bones[name].rotation_euler = (
+                math.radians(bend[j]),0,math.radians(yaw*side) if not j else 0)
+
+
 def animate(scene, rig, side, add_labels=False):
-    fingers = FINGERS[:4]
     for frame,label,bends,thumb,thumb_tip,wrist,swivel in POSES:
         if add_labels:
             scene.timeline_markers.new(label,frame=frame)
@@ -816,24 +847,20 @@ def animate(scene, rig, side, add_labels=False):
                 bone.rotation_euler = (0,0,0)
         rig.pose.bones["Forearm"].rotation_euler.y = math.radians(swivel*side)
         rig.pose.bones["Wrist"].rotation_euler = tuple(math.radians(v) for v in (wrist[0],wrist[1]*side,wrist[2]*side))
-        rigid = sum(bend[0] for bend in bends)/4/76
-        rig.pose.bones["Palm"].rotation_euler.x = math.radians(rigid*2.6)
-        for i,(spec,bend) in enumerate(zip(fingers,bends)):
-            splay = (i-1.24)*(5.4 if 28<=frame<=49 else 2.2)*(1-rigid)*side
-            meta = rig.pose.bones[f"{spec.name}.Metacarpal"]
-            meta.rotation_euler.x = math.radians((i/3)**1.5*10.8*rigid)
-            meta.rotation_euler.z = math.radians(splay*.26)
-            for j,name in enumerate(spec.joints):
-                pose = rig.pose.bones[name]
-                pose.rotation_euler.x = math.radians(bend[j])
-                if j==0:
-                    pose.rotation_euler.z = math.radians(15*side if frame in (112,126) and i==0 else splay)
+        pose_fingers(rig,bends,side,5.4 if (28<=frame<=49 or 95<=frame<=104) else 2.2,
+                     pinch=frame in (112,126))
         rig.pose.bones[THUMB_CONTROL].rotation_euler = tuple(math.radians(v) for v in (thumb[0],thumb[1]*side,thumb[2]*side))
         rig.pose.bones["Thumb.MCP"].rotation_euler.x = math.radians(thumb_tip[0])
         rig.pose.bones["Thumb.IP"].rotation_euler.x = math.radians(thumb_tip[1])
         for pose in rig.pose.bones:
             if pose.name not in ("Thumb.CMC","Thumb.Web"):
                 pose.keyframe_insert(data_path="rotation_euler",frame=frame,group=pose.name)
+    # Lift the thumb away from the index knuckle before both uncurl.
+    for name, angles in ((THUMB_CONTROL,(49,-24*side,-18*side)),
+                         ("Thumb.MCP",(27,0,0)),("Thumb.IP",(62,0,0))):
+        pose = rig.pose.bones[name]
+        pose.rotation_euler = tuple(map(math.radians,angles))
+        pose.keyframe_insert(data_path="rotation_euler",frame=88,group=pose.name)
     animation = rig.animation_data
     animation.action.name = "Hand pose study."+("R" if side>0 else "L")
     for curve in animation.action.layers[0].strips[0].channelbag(animation.action_slot).fcurves:
@@ -871,31 +898,37 @@ def aim_object(obj, target):
 
 
 def studio(scene, collection):
-    camera_data = bpy.data.cameras.new("Hands review camera")
-    camera_data.type = "ORTHO"
-    camera_data.ortho_scale = .447
-    camera = bpy.data.objects.new("Hands review camera",camera_data)
-    collection.objects.link(camera)
-    camera_angles = (
-        (1,(.002,-.061,.61),(-.015,.043,.045),.514),
-        (28,(.022,-.056,.60),(-.014,.043,.042),.517),
-        (39,(.351,-.025,.40),(.116,.078,.055),.282),
-        (49,(.426,.028,.322),(.122,.079,.064),.257),
-        (59,(.437,.027,.286),(.117,.073,.069),.246),
-        (80,(.340,-.039,.402),(.112,.069,.061),.251),
-        (111,(.376,.059,.370),(.114,.081,.069),.246),
-        (129,(.375,.047,.360),(.114,.083,.063),.252),
-        (151,(.124,-.034,.58),(.068,.052,.044),.351),
-        (180,(.002,-.066,.62),(-.015,.043,.041),.514),
-    )
-    for frame,at,look,width in camera_angles:
-        camera.location = at
-        aim_object(camera,look)
-        camera_data.ortho_scale = width
-        camera.keyframe_insert(data_path="location",frame=frame)
-        camera.keyframe_insert(data_path="rotation_euler",frame=frame)
-        camera_data.keyframe_insert(data_path="ortho_scale",frame=frame)
-    scene.camera = camera
+    def camera_shot(name, keys):
+        data = bpy.data.cameras.new(name)
+        data.type = "ORTHO"
+        camera = bpy.data.objects.new(name,data)
+        collection.objects.link(camera)
+        for frame, at, look, width in keys:
+            camera.location = at
+            aim_object(camera, look)
+            data.ortho_scale = width
+            camera.keyframe_insert(data_path="location", frame=frame)
+            camera.keyframe_insert(data_path="rotation_euler", frame=frame)
+            data.keyframe_insert(data_path="ortho_scale", frame=frame)
+        return camera
+
+    wide = camera_shot("Full hand review", (
+        (1,(.002,-.080,.61),(-.015,.043,.045),.515),
+        (28,(.022,-.075,.60),(-.014,.043,.042),.515),
+        (180,(.002,-.080,.62),(-.015,.043,.041),.515),
+    ))
+    detail = camera_shot("Thumb and fist close-up", (
+        (34,(.166,-.094,.59),(.106,.066,.060),.314),
+        (54,(.192,-.104,.52),(.115,.069,.065),.306),
+        (80,(.141,-.130,.56),(.103,.046,.069),.269),
+        (95,(.165,-.123,.56),(.104,.068,.064),.313),
+        (124,(.223,-.090,.51),(.111,.073,.064),.307),
+        (150,(.194,-.108,.55),(.108,.064,.063),.305),
+        (168,(.184,-.109,.56),(.107,.066,.059),.315),
+    ))
+    scene.camera = wide
+    for name, frame, camera in (("Both hands",1,wide),("Thumb close-up",34,detail),("Both hands return",171,wide)):
+        scene.timeline_markers.new(name,frame=frame).camera = camera
     floor = mesh("Studio backdrop",[(-3,-3,-.06),(3,-3,-.06),(3,3,-.06),(-3,3,-.06)],[(0,1,2,3)],collection)
     floor.data.materials.append(material("Slate",(.025,.035,.049),.88)[0])
     for name,center,power,radius,color in (
@@ -1023,7 +1056,7 @@ def configure_workspace(scene, hand):
     guide = bpy.data.texts.new("Hand pose guide")
     guide.write("FIRST-PERSON HANDS\n\n"
                 "The right palm and left dorsal hand are displayed side by side at real scale.\n"
-                "The timeline shows the opening thumb, the first web folding, fist closure and fingertip opposition.\n"
+                "The timeline shows separate thumb bends, a compact fist, a palm tuck and fingertip opposition.\n"
                 "Select Hand rig.R or Hand rig.L in the Outliner and enter Pose Mode to edit individual joints.\n"
                 "Rotate Thumb.Base for opposition. It raises the metacarpal as you swing the thumb in toward the palm.\n"
                 "Local X bends the independent Thumb.MCP and Thumb.IP hinges. Thumb.Web distributes the skin fold.\n"
@@ -1058,7 +1091,7 @@ def main():
     parser.add_argument("--preview",type=Path)
     parser.add_argument("--preview-scale",type=int,default=100)
     parser.add_argument("--samples",type=int,default=48)
-    parser.add_argument("--pose",choices=("open","thumb","closed","pinch","grip"),action="append")
+    parser.add_argument("--pose",choices=("open","thumb","closed","tuck","pinch","grip"),action="append")
     parser.add_argument("--motion",type=Path,help="Render the animated study as an MP4")
     parser.add_argument("--from-saved",action="store_true",help="Render the saved study at --output")
     opts = parser.parse_args(sys.argv[sys.argv.index("--")+1:] if "--" in sys.argv else [])
@@ -1108,7 +1141,8 @@ def main():
         folder.mkdir(parents=True,exist_ok=True)
         scene.cycles.samples = opts.samples
         scene.render.resolution_percentage = opts.preview_scale
-        for frame,name in ((28,"hands-open"),(49,"hands-thumb"),(80,"hands-closed"),(112,"hands-pinch"),(148,"hands-grip")):
+        for frame,name in ((28,"hands-open"),(49,"hands-thumb"),(80,"hands-closed"),(95,"hands-tuck"),
+                           (112,"hands-pinch"),(148,"hands-grip")):
             if opts.pose and name.removeprefix("hands-") not in opts.pose:
                 continue
             scene.frame_set(frame)
