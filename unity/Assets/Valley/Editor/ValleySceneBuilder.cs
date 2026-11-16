@@ -133,6 +133,7 @@ namespace ValleyCamcorder.Editor
             if(!renderer)renderer=Asset("Valley Renderer",ScriptableObject.CreateInstance<UniversalRendererData>());
             renderer.postProcessData=AssetDatabase.LoadAssetAtPath<PostProcessData>(
                 "Packages/com.unity.render-pipelines.universal/Runtime/Data/PostProcessData.asset");
+            ConfigureTapeSignal(renderer);
             EditorUtility.SetDirty(renderer);
             var urp=UniversalRenderPipelineAsset.Create(renderer);
             urp.supportsCameraDepthTexture=true;
@@ -144,6 +145,41 @@ namespace ValleyCamcorder.Editor
             var pipeline=Asset("Valley URP",urp);
             GraphicsSettings.defaultRenderPipeline=pipeline;
             QualitySettings.renderPipeline=pipeline;
+        }
+
+        public static void ConfigureTapeSignal()
+        {
+            var renderer=AssetDatabase.LoadAssetAtPath<UniversalRendererData>(Generated+"/Valley Renderer.asset");
+            if(!renderer) throw new InvalidOperationException("The Valley renderer asset is missing");
+            ConfigureTapeSignal(renderer);
+            AssetDatabase.SaveAssets();
+        }
+
+        static void ConfigureTapeSignal(UniversalRendererData renderer)
+        {
+            var shader=Shader.Find("Hidden/Valley/Tape Signal");
+            if(!shader) throw new InvalidOperationException("The Valley tape signal shader is missing");
+            var feature=renderer.rendererFeatures.OfType<ValleyTapeSignal>().FirstOrDefault();
+            if(!feature)
+            {
+                feature=ScriptableObject.CreateInstance<ValleyTapeSignal>();
+                feature.name="Valley DV tape signal";
+                AssetDatabase.AddObjectToAsset(feature,renderer);
+                renderer.rendererFeatures.Add(feature);
+                if(AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature,out _,out long id))
+                {
+                    var recipe=new SerializedObject(renderer);
+                    var keys=recipe.FindProperty("m_RendererFeatureMap");
+                    keys.arraySize=renderer.rendererFeatures.Count;
+                    keys.GetArrayElementAtIndex(keys.arraySize-1).longValue=id;
+                    recipe.ApplyModifiedPropertiesWithoutUndo();
+                }
+            }
+            feature.passMaterial=Asset("Tape signal",new Material(shader) {name="Tape signal"});
+            feature.injectionPoint=FullScreenPassRendererFeature.InjectionPoint.AfterRenderingPostProcessing;
+            EditorUtility.SetDirty(feature);
+            EditorUtility.SetDirty(renderer);
+            renderer.SetDirty();
         }
 
         static void Environment(Assembly a)

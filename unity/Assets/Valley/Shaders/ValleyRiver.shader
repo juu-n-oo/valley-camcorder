@@ -19,6 +19,9 @@ Shader "Valley/River"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
 
+            float4 _ValleyRipples[24];
+            int _ValleyRippleCount;
+
             struct Attributes { float4 positionOS:POSITION; float2 uv:TEXCOORD0; };
             struct Varyings
             {
@@ -54,7 +57,23 @@ Shader "Valley/River"
                 float main=sin(dot(q,float2(.91,-4.1))+t*1.51+eddy*4.1);
                 float shortWave=sin(dot(q,float2(-1.48,-9.6))+t*3.62+main*.80+eddy*2.13);
                 float chop=sin(dot(q,float2(3.41,-17.31))+t*5.62+eddy*3.3);
-                float3 normal=normalize(float3(main*.031+shortWave*.038+chop*.018,1,main*.097+shortWave*.066+chop*.024));
+                float2 wake=0;
+                float waterRings=0;
+                [loop] for(int i=0;i<_ValleyRippleCount;i++)
+                {
+                    float4 ripple=_ValleyRipples[i];
+                    float age=t-ripple.z;
+                    if(age<0 || age>=3.2) continue;
+                    float2 offset=q-ripple.xy;
+                    float radius=length(offset);
+                    float rim=radius-(.14+1.37*age);
+                    float envelope=exp(-rim*rim*(14-3*age))*exp(-age*1.06)*ripple.w;
+                    float crest=cos(25*rim)*envelope;
+                    wake+=offset/max(.05,radius)*crest*.123;
+                    waterRings+=max(0,crest);
+                }
+                float3 normal=normalize(float3(main*.031+shortWave*.038+chop*.018+wake.x,1,
+                    main*.097+shortWave*.066+chop*.024+wake.y));
                 float3 view=GetWorldSpaceNormalizeViewDir(p);
                 float depth=max(.005,-input.bed);
                 float eye=-TransformWorldToView(p).z;
@@ -76,7 +95,7 @@ Shader "Valley/River"
                 float glints=smoothstep(.46,.94,shortWave*.61+main*.16+chop*.26)*pow(fresnel,.64);
                 float shore=exp(-abs(input.bed+.018)*27)*smoothstep(.66,.90,Noise(q*7.1+t*.118));
                 half3 result=lerp(water,reflection,fresnel);
-                result+=half3(.86,.89,.76)*(glint*.42+glints*.15+shore*.22);
+                result+=half3(.86,.89,.76)*(glint*.42+glints*.15+shore*.22+waterRings*.09);
                 if(view.y<0) result=lerp(half3(.05,.095,.039),reflection,.38)+glints*.22;
                 float alpha=saturate(.68+fresnel*.48+visibleDepth*.28);
                 return half4(MixFog(result,input.fog),alpha);

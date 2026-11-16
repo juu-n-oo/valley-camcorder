@@ -135,6 +135,18 @@ namespace ValleyCamcorder
             return source;
         }
 
+        internal void DemoFoot(string key,bool running,Vector3 at)
+        {
+            var distance=Vector2.Distance(new Vector2(at.x,at.z),new Vector2(listener.position.x,listener.position.z));
+            if(distance>=12 || !banks.TryGetValue(key+(running ? "Run" : "Walk"),out var clips)) return;
+            var volume=.45f*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(2,12,distance)));
+            var source=WorldSource("Demo footstep",at,transform,volume);
+            source.maxDistance=12;
+            source.clip=clips[UnityEngine.Random.Range(0,clips.Count)];
+            source.Play();
+            Destroy(source.gameObject,source.clip.length+.15f);
+        }
+
         static AudioSource WorldSource(string key,Vector3 at,Transform parent,float volume)
         {
             var node=new GameObject(key+" sound");

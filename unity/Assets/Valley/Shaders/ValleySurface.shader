@@ -10,6 +10,9 @@ Shader "Valley/Weathered Surface"
         _Smoothness("Smoothness", Range(0,1)) = .20
         _Metallic("Metallic", Range(0,1)) = 0
         _Cutoff("Cutout", Range(0,1)) = .43
+        [HideInInspector] _FabricWind("Fabric wind", Vector) = (0,0,0,0)
+        [HideInInspector] _FabricTouch("Fabric contact", Vector) = (0,0,0,-2)
+        [HideInInspector] _FabricPush("Fabric contact direction", Vector) = (0,0,0,0)
         [HideInInspector] _Cull("Cull", Float) = 0
         [HideInInspector] _SrcBlend("Source blend", Float) = 1
         [HideInInspector] _DstBlend("Destination blend", Float) = 0
@@ -41,6 +44,7 @@ Shader "Valley/Weathered Surface"
             TEXTURE2D(_GroundCover); SAMPLER(sampler_GroundCover);
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
+                float4 _FabricWind, _FabricTouch, _FabricPush;
                 float _Kind, _Opacity, _Smoothness, _Metallic, _Cutoff, _Cull, _SrcBlend, _DstBlend, _ZWrite;
             CBUFFER_END
 
@@ -66,7 +70,17 @@ Shader "Valley/Weathered Surface"
             {
                 UNITY_SETUP_INSTANCE_ID(input);
                 Varyings output;
-                output.positionWS=TransformObjectToWorld(input.positionOS.xyz);
+                float3 local=input.positionOS.xyz;
+                if (_FabricWind.x>0)
+                {
+                    float drape=saturate((local.y-_FabricWind.y)*_FabricWind.z);
+                    float phase=dot(local.xz,float2(4.1,3.6))+_Time.y*3.7+_FabricWind.w;
+                    local+=input.normalOS*_FabricWind.x*drape*(sin(phase)*.64+sin(phase*1.57)*.36);
+                    float age=_Time.y-_FabricTouch.w;
+                    float proximity=1-saturate(distance(input.positionOS.xyz,_FabricTouch.xyz)*5);
+                    local+=_FabricPush.xyz*proximity*proximity*sin(age*22)*saturate(1-age*3.3);
+                }
+                output.positionWS=TransformObjectToWorld(local);
                 if (_Kind==4)
                 {
                     float w=sin(dot(output.positionWS.xz,float2(.11,.085))+_Time.y*1.15);
@@ -180,6 +194,14 @@ Shader "Valley/Weathered Surface"
                     half3 frame=SAMPLE_TEXTURE2D(_BaseMap,sampler_BaseMap,input.uv).rgb;
                     half scan=.87h+.13h*sin(input.uv.y*750);
                     albedo=frame*half3(.71h,.86h,.81h)*scan;
+                }
+                else if (_Kind==37)
+                {
+                    float2 sootUV=(input.uv-.5)*2;
+                    float uneven=Noise(input.uv*16)*.30+Noise(input.uv*49)*.15;
+                    alpha*=1-smoothstep(.20,.91,length(sootUV)+uneven);
+                    albedo=half3(.020h,.017h,.014h)*(1+uneven);
+                    rough=.09h;
                 }
                 else if (_Kind==10 || _Kind==11 || _Kind==12 || _Kind==16 || _Kind==7 || _Kind==14 ||
                          _Kind==13 || _Kind==19 || _Kind==20 || _Kind==22 || _Kind==25 || _Kind==26 ||

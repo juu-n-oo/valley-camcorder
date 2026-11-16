@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace ValleyCamcorder
 {
-    public sealed class ValleyFixture : MonoBehaviour
+    public sealed partial class ValleyFixture : MonoBehaviour
     {
         public string kind;
         public bool portable, small, locked, opened, enabledState;
@@ -16,6 +16,7 @@ namespace ValleyCamcorder
         float opening;
         float ignitionTime, nextSpark, lightAt, clickUntil, wheelDrop, appliedControl, hitCooldown;
         bool failed;
+        int tankHits;
         bool pushed;
         Rigidbody body;
         Collider[] hitboxes;
@@ -27,6 +28,18 @@ namespace ValleyCamcorder
         internal bool CollapsedFabric { get; set; }
         public bool Broken { get; private set; }
         internal bool HasPower => !failed && !Broken;
+        internal string ImpactMaterial => kind switch
+        {
+            "glass" or "carLens"=>"glass",
+            "ceramic" or "plate" or "bowl" or "cup"=>"ceramic",
+            "tube" or "carTire"=>"vinyl",
+            "chair" or "tent" or "umbrella" or "cushion"=>"cloth",
+            "pamphlet" or "document"=>"paper",
+            "door" or "woodFloor" or "woodStair" or "desk" or "rack"=>"wood",
+            "table" or "phone" or "crt" or "box"=>"plastic",
+            "wallPanel" or "serviceStand"=>"rock",
+            _=>"metal"
+        };
 
         public bool CanUse => !failed && !Broken && (kind is "door" or "fridge" or "carDoor" or "carLid" or "carStorage" or "carLock" or "carHandle"
             or "light" or "faucet" or "valve" or "burner");
@@ -56,7 +69,9 @@ namespace ValleyCamcorder
         void Awake()
         {
             opening = opened ? 1 : 0;
-            hitboxes = GetComponentsInChildren<Collider>(true);
+            var colliders=GetComponentsInChildren<Collider>(true);
+            hitboxes=System.Array.FindAll(colliders,hit=>hit.GetComponentInParent<ValleyFixture>()==this);
+            previousPosition=wakeAt=transform.position;
         }
 
         internal void Link(ValleyMapInteractions.Part part,ValleyMapInteractions map)
@@ -120,14 +135,7 @@ namespace ValleyCamcorder
         void Update()
         {
             var dt=Time.deltaTime;
-            if(wheelDrop>0)
-            {
-                var visual=transform.GetChild(0);
-                var scale=visual.localScale;
-                scale.y=Mathf.MoveTowards(scale.y,.72f,dt*.75f);
-                visual.localScale=scale;
-                wheelDrop=Mathf.Max(0,wheelDrop-dt);
-            }
+            UpdateFlexibleProps(dt);
             if(kind=="burner")
             {
                 var gas=gasValve && gasValve.enabledState;
@@ -174,10 +182,30 @@ namespace ValleyCamcorder
             if(!CanUse || Mathf.Abs(swing)+Mathf.Abs(pitch)+travel.sqrMagnitude < .0001f) return;
             float target = opened ? 1 : 0;
             if(opening == target) return;
+            var lastOpening=opening;
+            var lastPosition=transform.localPosition;
+            var lastRotation=transform.localRotation;
             opening = Mathf.MoveTowards(opening,target,dt*2.45f);
             var ease = opening*opening*(3-2*opening);
             transform.localPosition = closedAt + closedRotation*(travel*ease);
             transform.localRotation = closedRotation*Quaternion.Euler(pitch*ease,swing*ease,0);
+            if((kind is "door" or "carDoor") && BlocksOperator())
+            {
+                opening=lastOpening;
+                transform.SetLocalPositionAndRotation(lastPosition,lastRotation);
+            }
+        }
+
+        bool BlocksOperator()
+        {
+            if(!effects || !effects.Operator) return false;
+            var player=effects.Operator.GetComponent<CharacterController>();
+            if(!player.enabled || (transform.position-player.transform.position).sqrMagnitude>9) return false;
+            foreach(var hit in hitboxes)
+                if(hit is BoxCollider && !hit.isTrigger && hit.enabled && Physics.ComputePenetration(hit,
+                    hit.transform.position,hit.transform.rotation,player,player.transform.position,player.transform.rotation,
+                    out _,out var distance) && distance>.015f) return true;
+            return false;
         }
 
         internal void Shutdown()
@@ -195,9 +223,7 @@ namespace ValleyCamcorder
             if(Broken) return;
             if(kind=="tank")
             {
-                if(durability<=0) durability=4.6f;
-                durability-=impulse;
-                if(durability<=0) effects?.Burst(this);
+                if(impulse>.08f && ++tankHits==4) effects?.Burst(this);
             }
             if(kind=="carLid" && impulse>.60f)
             {
@@ -214,19 +240,17 @@ namespace ValleyCamcorder
                     effects?.Cue("tire",at,.85f);
                 }
             }
-            if(kind=="tube" && impulse>=1.3f && !CollapsedFabric)
+            if(kind=="tube" && impulse>=1.3f && !leaking)
             {
-                CollapsedFabric=true;
-                foreach(var render in GetComponentsInChildren<MeshRenderer>())
-                    render.transform.localScale=Vector3.Scale(render.transform.localScale,new Vector3(1.06f,.30f,1.07f));
-                effects?.Cue("tire",at,.40f);
+                leaking=true;
+                effects?.Cue("vinyl-vent",at,.67f);
             }
             if(kind is "glass" or "ceramic" or "carLens" || portable && Fragile)
             {
                 if(!Fragile && durability<=0) return;
-                if(portable && durability<=0) durability=.72f;
+                if(portable && durability<=0) durability=recordedHealth>0 ? recordedHealth : .72f;
                 durability-=impulse;
-                if(durability<=0) Break(at);
+                if(durability<=0) {Break(at);return;}
             }
             if(kind=="table" || kind=="chair")
             {
@@ -237,14 +261,17 @@ namespace ValleyCamcorder
                     hitCooldown+=impulse;
                     if(hitCooldown>6.2f)
                     {
-                        effects?.Cue("timber",at,.72f);
-                        Break(at,false);
+                        if(effects) effects.BreakFurniture(this,at,push);
+                        else Disable();
                     }
                 }
             }
+            else if(portable && !installed && impulse>.21f)
+                Nudge((direction.sqrMagnitude>.01f ? direction : transform.forward)*Mathf.Min(2.15f,impulse*.82f),
+                    at,Mathf.Min(.44f,impulse*.32f));
         }
 
-        bool Fragile => kind is "cup" or "bowl" or "plate" or "tumbler" or "pitcher" or "jar" or "carLens";
+        bool Fragile => fragile || kind is "cup" or "bowl" or "plate" or "tumbler" or "pitcher" or "jar" or "carLens";
 
         internal void Break(Vector3 at,bool sound=true,bool fragments=true)
         {
@@ -255,6 +282,8 @@ namespace ValleyCamcorder
 
         internal void Disable()
         {
+            ReleaseContents(Vector3.down*.26f);
+            Detach();
             Broken=true;
             gameObject.SetActive(false);
         }
@@ -283,7 +312,9 @@ namespace ValleyCamcorder
 
         internal void Nudge(Vector3 force,Vector3 at,float lift)
         {
-            if(IsCarried || Broken || !portable || force.sqrMagnitude<.03f) return;
+            if(IsCarried || Broken || occupied || !portable || installed || force.sqrMagnitude<.03f) return;
+            Detach();
+            ReleaseContents(force*.74f);
             if(body==null) body=gameObject.AddComponent<Rigidbody>();
             body.mass=Mathf.Clamp(mass,.12f,32);
             body.isKinematic=false;
@@ -299,33 +330,59 @@ namespace ValleyCamcorder
 
         void OnCollisionEnter(Collision collision)
         {
-            if(body && !body.isKinematic && Fragile && collision.relativeVelocity.magnitude>2.9f)
-                ToyImpact(collision.relativeVelocity.magnitude*.28f,collision.GetContact(0).point,Vector3.zero);
+            if(!body || body.isKinematic || collision.contactCount==0) return;
+            var hit=collision.GetContact(0);
+            var speed=collision.relativeVelocity.magnitude;
+            if(Fragile && speed>2.9f) ToyImpact(speed*.28f,hit.point,Vector3.zero);
+            if(Broken) return;
+            if(speed<1.55f && hit.normal.y>.63f)
+            {
+                var stand=collision.collider.GetComponentInParent<ValleyFixture>();
+                if(stand && stand.TrySurface(this,hit.point,out var resting))
+                {
+                    SetDown(resting,stand);
+                    return;
+                }
+            }
+            if(speed>.74f && effects && Time.time>=contactAt)
+            {
+                contactAt=Time.time+.10f;
+                effects.Contact(hit.point,hit.normal,-collision.relativeVelocity.normalized,ImpactMaterial,
+                    Mathf.Min(1,speed*.17f),true);
+            }
         }
 
         public void Pickup()
         {
+            ReleaseContents(Vector3.down*.12f);
+            Detach();
             IsCarried=true;
             transform.SetParent(null,true);
             if (body != null) body.isKinematic=true;
             foreach (var hit in hitboxes) hit.enabled=false;
         }
 
-        public void SetDown(Vector3 at)
+        public void SetDown(Vector3 at,ValleyFixture resting=null)
         {
             transform.position=at;
             IsCarried=false;
+            if(body) body.isKinematic=true;
             foreach (var hit in hitboxes) hit.enabled=true;
+            if(resting) Attach(resting);
+            previousPosition=at;
         }
 
         public void Toss(Vector3 velocity)
         {
+            Detach();
+            ReleaseContents(velocity*.62f);
             SetDown(transform.position);
             if (body == null) body=gameObject.AddComponent<Rigidbody>();
             body.mass=Mathf.Clamp(mass,.12f,32f);
             body.isKinematic=false;
             body.linearVelocity=velocity;
             body.angularVelocity=transform.right*2.3f;
+            body.collisionDetectionMode=CollisionDetectionMode.ContinuousDynamic;
         }
     }
 }

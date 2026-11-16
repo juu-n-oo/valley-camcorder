@@ -10,6 +10,8 @@ namespace ValleyCamcorder
         ValleyFixture fixture;
         MeshCollider shape;
         Mesh mesh;
+        MeshRenderer cloth;
+        MaterialPropertyBlock properties;
         bool frame, falling;
 
         public static void Add(ValleyFixture item,Collider player)
@@ -18,28 +20,54 @@ namespace ValleyCamcorder
             bool first=true;
             foreach(var branch in item.GetComponentsInChildren<MeshFilter>())
             {
-                var material=branch.GetComponent<MeshRenderer>().sharedMaterial;
+                var drawing=branch.GetComponent<MeshRenderer>();
+                var material=drawing.sharedMaterial;
                 if(!material || !branch.sharedMesh || !branch.sharedMesh.isReadable) continue;
                 var kind=material.GetInt("_Kind");
                 var isFrame=kind is 15 or 40 or 47;
+                if(!isFrame)
+                {
+                    var bounds=branch.sharedMesh.bounds;
+                    var block=new MaterialPropertyBlock();
+                    drawing.GetPropertyBlock(block);
+                    block.SetVector("_FabricWind",new Vector4(item.kind=="tent" ? .017f : .025f,bounds.min.y,
+                        1/Mathf.Max(.15f,bounds.size.y),branch.transform.position.x*.31f));
+                    drawing.SetPropertyBlock(block);
+                }
                 if(!isFrame && !first) continue;
                 var contact=branch.gameObject.AddComponent<ValleyFabric>();
                 contact.frame=isFrame;
                 contact.fixture=item;
+                if(!isFrame)
+                {
+                    contact.cloth=drawing;
+                    contact.properties=new MaterialPropertyBlock();
+                }
                 contact.shape=branch.gameObject.AddComponent<MeshCollider>();
                 contact.shape.sharedMesh=branch.sharedMesh;
                 Physics.IgnoreCollision(player,contact.shape);
-                first=false;
+                if(!isFrame) first=false;
             }
         }
 
-        public void Hit(Vector3 at,Vector3 direction,float speed)
+        public bool Hit(Vector3 at,Vector3 direction,float speed)
         {
-            if(falling || fixture.Broken || speed<13) return;
-            if(!mesh) mesh=GetComponent<MeshFilter>().mesh;
+            if(falling || fixture.Broken || speed<3) return false;
             var local=transform.InverseTransformPoint(at);
-            var vertices=mesh.vertices;
             var force=transform.InverseTransformVector(direction.normalized)*Mathf.Min(.08f,speed*.0014f);
+            if(cloth && speed<24)
+            {
+                cloth.GetPropertyBlock(properties);
+                properties.SetVector("_FabricTouch",new Vector4(local.x,local.y,local.z,Time.timeSinceLevelLoad));
+                properties.SetVector("_FabricPush",force);
+                cloth.SetPropertyBlock(properties);
+                fixture.effects?.Cue("cloth-contact",at,.35f);
+                return false;
+            }
+            if(speed<13) return false;
+            bool torn=false;
+            if(!mesh) mesh=GetComponent<MeshFilter>().mesh;
+            var vertices=mesh.vertices;
             var reach=frame ? .21f : .081f+speed*.0012f;
             for(int i=0;i<vertices.Length;i++)
             {
@@ -57,7 +85,7 @@ namespace ValleyCamcorder
                     var a=vertices[triangles[i]];
                     var b=vertices[triangles[i+1]];
                     var c=vertices[triangles[i+2]];
-                    if((ClosestPoint(local,a,b,c)-local).sqrMagnitude<rangeSq) continue;
+                    if((ClosestPoint(local,a,b,c)-local).sqrMagnitude<rangeSq) {torn=true;continue;}
                     remaining.Add(triangles[i]);remaining.Add(triangles[i+1]);remaining.Add(triangles[i+2]);
                 }
                 mesh.SetTriangles(remaining,0);
@@ -69,14 +97,15 @@ namespace ValleyCamcorder
                 shape.sharedMesh=null;
                 if(mesh.GetIndexCount(0)>0) shape.sharedMesh=mesh;
             }
-            fixture.effects?.Cue(frame ? "timber" : "cloth-tear",at,.46f);
-            if(!frame || speed<29 || joints.Exists(p=>(p-local).sqrMagnitude<.12f)) return;
+            fixture.effects?.Cue(frame ? "metal-ricochet" : torn ? "cloth-tear" : "cloth-contact",at,.46f);
+            if(!frame || speed<29 || joints.Exists(p=>(p-local).sqrMagnitude<.12f)) return torn;
             joints.Add(local);
             if(joints.Count>=3)
             {
                 falling=true;
                 StartCoroutine(Fold());
             }
+            return torn;
         }
 
         IEnumerator Fold()

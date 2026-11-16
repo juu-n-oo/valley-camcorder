@@ -53,6 +53,7 @@ namespace ValleyCamcorder
         readonly Camera camera;
         readonly ValleyAudio sound;
         readonly Collider player;
+        readonly ValleyPlayer owner;
         readonly Transform rig;
         readonly float hipFov;
         readonly List<GameObject> launched=new();
@@ -71,6 +72,7 @@ namespace ValleyCamcorder
         public string Label => Labels[selected];
         public int Ammo => Current.loaded.Count;
         public int Capacity => Current.model.capacity;
+        public int SlotColor(int slot) => slot<Current.loaded.cars.Count ? Current.loaded.cars[slot] : -1;
         public int Reserve => selected==Rifle ? Current.reserve : Current.spares.Count+(Ammo>0 ? 1 : 0);
         public int Total
         {
@@ -110,12 +112,14 @@ namespace ValleyCamcorder
         public bool CanAct => draw>.68f && pending<0 && !Current.onGround;
         public bool OwnsSelection => !Current.onGround;
         public float Trigger => press;
+        internal float CastSwing { private get; set; }
 
-        public ValleyEquipment(Camera camera,GameObject original,Collider player,ValleyAudio sound)
+        public ValleyEquipment(Camera camera,GameObject original,Collider player,ValleyAudio sound,ValleyPlayer owner)
         {
             this.camera=camera;
             this.player=player;
             this.sound=sound;
+            this.owner=owner;
             hipFov=camera.fieldOfView;
             Assets=new ValleyGearAssets(original);
             original.SetActive(false);
@@ -169,6 +173,7 @@ namespace ValleyCamcorder
             leftInFrame=0;
             incoming=outgoing=null;
             closingFrom=null;
+            CastSwing=0;
             sound.Mechanism(null);
         }
 
@@ -187,7 +192,17 @@ namespace ValleyCamcorder
             => DropLauncher(at,rotation,Vector3.zero,false);
 
         public bool Toss(Vector3 velocity)
-            => DropLauncher(HandleNearPlayer(),Current.root.rotation,velocity,true);
+            => DropLauncher(ClearCastPoint(HandleNearPlayer()+camera.transform.forward*CastSwing*.21f),
+                Current.root.rotation,velocity,true);
+
+        internal Vector3 ClearCastPoint(Vector3 requested)
+        {
+            var from=camera.transform.position;
+            var path=requested-from;
+            if(Physics.SphereCast(from,.046f,path.normalized,out var hit,path.magnitude,owner.interactionMask,QueryTriggerInteraction.Ignore))
+                return from+path.normalized*Mathf.Max(.07f,hit.distance-.065f);
+            return requested;
+        }
 
         Vector3 HandleNearPlayer()
         {
@@ -468,7 +483,9 @@ namespace ValleyCamcorder
             var quiet=action!=null ? .12f : Mathf.Lerp(1,.29f,aim);
             var shift=new Vector3((-swayX+Mathf.Sin(stride*.51f)*.016f)*quiet+away*.12f,
                 (swayY+Mathf.Cos(stride)*.008f)*quiet-kick*.024f-away*.74f,-kick*.084f-away*.04f);
-            new Pose(root.at+shift,root.turn*Quaternion.Euler(-kick*4.6f+away*13,swayX*18*quiet,0)).Apply(gear.root);
+            shift+=new Vector3(CastSwing*.084f,CastSwing*.12f,CastSwing*.23f);
+            new Pose(root.at+shift,root.turn*Quaternion.Euler(-kick*4.6f+away*13-CastSwing*29,
+                swayX*18*quiet+CastSwing*12,CastSwing*17)).Apply(gear.root);
             var palm=Frame(SupportPose,progress,jam);
             Support=palm.scale>.035f ? gear.root.TransformPoint(palm.at) : null;
             for(int i=0;i<gear.shell.Length;i++)
@@ -559,22 +576,21 @@ namespace ValleyCamcorder
             LastRailHeading=selected==Smg ? (muzzle-start).normalized : Vector3.zero;
             shots++;
             sound.Cue("shot-"+gear.model.kind);
+            var projectile=SpawnProjectile(color,muzzle,heading*gear.model.speed,gear.model.drag,gear.model.scale,false);
+            if(Line(head.position,start,out var hit) || Line(start,muzzle,out hit)) projectile.Obstructed(hit);
+        }
+
+        internal ValleyToyCar SpawnProjectile(int color,Vector3 at,Vector3 velocity,float drag,float scale,bool opponent)
+        {
             var car=Assets.NewPart(Assets.Data.carIds[color],null,"Launched mini-car",true);
-            car.SetPositionAndRotation(muzzle,Quaternion.LookRotation(heading));
-            car.localScale=Vector3.one*gear.model.scale;
+            car.SetPositionAndRotation(at,Quaternion.LookRotation(velocity));
+            car.localScale=Vector3.one*scale;
             var projectile=car.gameObject.AddComponent<ValleyToyCar>();
-            var velocity=heading*gear.model.speed;
-            if(Line(head.position,start,out var hit) || Line(start,muzzle,out hit))
-            {
-                projectile.Impact(hit.collider,hit.point,gear.model.speed,heading);
-                car.position=hit.point+hit.normal*.04f;
-                velocity=Vector3.Reflect(velocity,hit.normal)*.19f;
-            }
-            projectile.Begin(player,velocity,gear.model.drag);
+            projectile.Begin(owner,velocity,drag,opponent);
             launched.RemoveAll(item=>!item);
             if(launched.Count>=50) {Object.Destroy(launched[0]); launched.RemoveAt(0);}
             launched.Add(car.gameObject);
-            Object.Destroy(car.gameObject,PartLifetime);
+            return projectile;
         }
 
         static Vector3 AimPoint(Launcher gear,Transform head,Vector3 muzzle)

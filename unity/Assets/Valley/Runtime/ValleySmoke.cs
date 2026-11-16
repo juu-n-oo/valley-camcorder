@@ -34,6 +34,19 @@ namespace ValleyCamcorder
                 Fail("Spawn or Blender rig failed");
                 yield break;
             }
+            var font=Resources.Load<Font>("ValleyTape/Tape");
+            if(!font || !font.HasCharacter('A') || ValleyTape.TapeClock(60)!="PM 2:42")
+            {Fail("The original tape font or recorded clock was not loaded");yield break;}
+            var film=Shader.Find("Hidden/Valley/Tape Signal");
+            if(!film || !film.isSupported || film.passCount!=1)
+            {Fail("The camcorder signal pass could not be rendered");yield break;}
+            player.Pause(true);
+            var pausedAt=player.TapeTime;
+            yield return new WaitForSecondsRealtime(.12f);
+            var paused=player.Paused && player.TapeTime==pausedAt && AudioListener.pause;
+            player.PlayTape(false);
+            if(!paused || player.Paused || !player.PlaybackStarted || AudioListener.pause)
+            {Fail("Tape pause did not freeze simulation and audio or resume playback");yield break;}
             var riverPosition=new Vector3(map.spawn[0]-1.1f,map.spawn[1],-2);
             var lookAt=new Vector3(36,3.3f,39);
             var outline=map.river.OrderBy(item=>Mathf.Abs(item.z+39)).First();
@@ -44,7 +57,21 @@ namespace ValleyCamcorder
             player.Warp(riverPosition,heading,-1.5f);
             yield return null;
             Capture(player.view,"valley-river.png");
+#if UNITY_EDITOR
+            if(UnityEditor.ShaderUtil.ShaderHasError(film))
+            {Fail("The camcorder signal failed shader compilation");yield break;}
+#endif
             yield return new WaitForSeconds(.35f);
+
+            var bank=map.river.First(section=>Mathf.Abs(section.z-map.spawn[2])<3 && section.right-section.left>2);
+            var wet=new Vector3((bank.left+bank.right)*.5f,0,-bank.z);
+            wet.y=map.WaterLevel(wet);
+            var splashes=player.Water.Splashes;
+            var sinking=player.Equipment.SpawnProjectile(0,wet+Vector3.up*.61f,Vector3.down*5,.07f,1,false);
+            yield return new WaitForSeconds(.32f);
+            if(!sinking || !sinking.Sinking || player.Water.Splashes<=splashes)
+            {Fail("A live mini-car did not splash and sink in the river");yield break;}
+            player.Equipment.ClearProjectiles();
 
             var range=ValleyManifest.Point(map.rangeSpawn);
             player.Warp(range,0,38);
@@ -72,6 +99,12 @@ namespace ValleyCamcorder
             }
 
             var items=FindObjectsByType<ValleyFixture>();
+            var installed=items.FirstOrDefault(item=>item.kind=="ashtray" && item.Support);
+            if(!installed || installed.CanPickup || !installed.Support.Use())
+            {Fail("A closed car tray did not conceal its removable insert");yield break;}
+            yield return new WaitForSeconds(.58f);
+            if(!installed.CanPickup || installed.transform.parent!=installed.Support.transform)
+            {Fail("The removable tray insert did not follow the compartment");yield break;}
             var door=items.First(item=>item.kind=="door" && Mathf.Abs(item.swing)>25 && !item.opened);
             var closed=door.transform.localRotation;
             door.Use();
@@ -121,10 +154,27 @@ namespace ValleyCamcorder
                 Fail($"A live Unity rifle projectile missed. Muzzle {live.LastMuzzle}, heading {live.LastLaunch}, disc {target.transform.position}, view {camera.position} {camera.forward}, sight hit {hit.collider?.name}");
                 yield break;
             }
+            if(player.sound.LastCue!="target-mark" || !target.name.Contains("Target"))
+            {Fail("The scored target did not emit its original confirmation");yield break;}
+            var demo=player.SetAnimationDemo(true);
+            var idle=demo.Position;
+            demo.Present(132);
+            if(demo.BoneCount!=18 || Vector3.Distance(idle,demo.Position)<.5f)
+            {Fail("The full-body animation fixture did not skin or locomote");yield break;}
+            bool carrying=false;
+            for(int frame=150;frame<288 && !carrying;frame+=8)
+            {
+                demo.Present(frame);
+                carrying=demo.Holding;
+            }
+            if(!carrying) {Fail("The character demo skipped its two-handed box hold");yield break;}
+            player.SetAnimationDemo(false);
 
             var lodge=map.landmarks.First(site=>site.id=="muljon");
             var lodgeAt=ValleyManifest.Point(lodge.at);
             var facing=ValleyManifest.Turn(lodge.yaw);
+            if(player.Facilities.PlaceName(lodgeAt,false,false,false)!="MULJON LODGE 1F")
+            {Fail("The original lodge and floor label were not given to the tape");yield break;}
             var monitors=FindObjectsByType<ValleyMonitor>();
             if(monitors.Length!=3 || monitors.Any(item=>item.views.Length!=2))
             {Fail("Lobby monitors did not receive both camera angles");yield break;}
@@ -188,22 +238,32 @@ namespace ValleyCamcorder
             if(basins.Any(item=>!item.Broken) || player.Facilities.Leaks!=2 || player.sound.LastWorldCue!="ceramic")
             {Fail("Bathroom breakage did not trigger shards, jet and the recording");yield break;}
             var tank=items.Where(item=>item.kind=="tank").OrderBy(item=>(item.transform.position-lodgeAt).sqrMagnitude).First();
-            tank.ToyImpact(1.1f);
-            if(tank.Broken) {Fail("Tank durability was skipped");yield break;}
+            player.Warp(riverPosition,heading);
+            player.HitByBlast(player.transform.position-Vector3.right*7,.40f);
+            if(!player.Incapacitated || player.Health>=100 || player.Health<=0 || player.BlastExposure<.35f)
+            {Fail("A survivable blast did not knock down the player");yield break;}
+            yield return new WaitForSeconds(3.15f);
+            if(player.Incapacitated) {Fail("The player did not stand after a survivable blast");yield break;}
+            player.Warp(ValleyManifest.Point(map.spawn),0);
+            for(int hit=0;hit<3;hit++) tank.ToyImpact(1.1f);
+            if(tank.Broken || player.Facilities.ActiveAlarms!=0) {Fail("Tank durability was skipped");yield break;}
             tank.ToyImpact(4.5f);
+            yield return new WaitForSeconds(2.10f);
             var stairs=items.Where(item=>item.kind=="woodStair" && item.Burning).ToArray();
-            if(!tank.Broken || stairs.Length==0 || !GameObject.Find("Breached wall"))
-            {Fail("The blast did not open the wall and ignite nearby stairs");yield break;}
-            yield return new WaitForSeconds(6.55f);
-            if(!stairs.Any(item=>item.Broken)) {Fail("The burning stairs did not collapse");yield break;}
+            if(!tank.Broken || stairs.Length==0 || !GameObject.Find("Breached wall") ||
+                player.Facilities.ActiveAlarms==0 || player.Facilities.ActiveSprinklers==0 || player.Facilities.ScorchCount==0)
+            {Fail("The breach, timber fire, fire alarm, sprinklers or persistent soot were missing");yield break;}
+            yield return new WaitForSeconds(9.4f);
+            if(!stairs.Any(item=>item.Broken) || player.Facilities.ScorchCount==0)
+            {Fail("The burning stairs did not collapse or the soot did not persist");yield break;}
             player.FireDamage(100);
             yield return new WaitForSeconds(.17f);
             if(!player.Rewinding || player.sound.LastCue!="rewind") {Fail("The death rewind and sound did not start");yield break;}
-            yield return new WaitForSeconds(1.2f);
+            yield return new WaitForSeconds(1.93f);
             if(player.Rewinding || player.Health!=100 || Vector3.Distance(player.transform.position,ValleyManifest.Point(map.spawn))>.25f ||
                 !tank.Broken) {Fail("Respawn did not return to the valley or preserve scene damage");yield break;}
 
-            var line="PASS: Unity spawn, 16-joint FBX, props, lodge door, car glass and unlock, live range projectile, three launchers, reload and audio, inventory, ADS, supply, diving, CCTV, tent posture and tearing, ignition, bathroom breakage, timber collapse and rewind.";
+            var line="PASS: Unity tape, original font and location, 16-joint hands, supported props, car glass and locks, projectile and chime, 18-joint character demo, all launchers, inventory, ADS, supply, swimming and bubbles, sinking mini-car, CCTV, cloth, stove, fixtures, blast recovery, alarm, sprinklers, soot, timber collapse and rewind.";
             Debug.Log(line);
             File.WriteAllText(Path.Combine(folder,"play-mode.txt"),line);
             Exit(0);
@@ -319,15 +379,26 @@ namespace ValleyCamcorder
             }
             if(!pool.HasValue) return "Deep-water test could not find a swimmable river bed";
             player.Warp(pool.Value,0);
+            var bubbles=player.Water.BubbleBursts;
             Advance(player,.73f);
             if(!player.Swimming || player.Underwater) return "Player did not float at the surface in deep water";
             player.Step(1/60f,new ValleyPlayer.Controls {z=true});
             Advance(player,1.2f);
-            if(!player.Diving || !player.Underwater || player.Air>=19.7f) return "Z did not dive or consume breath";
+            if(!player.Diving || !player.Underwater || player.Air>=19.7f || player.Water.BubbleBursts<=bubbles)
+                return "Z did not dive, create bubbles or consume breath";
             Capture(player.view,"valley-dive.png");
             player.Step(1/60f,new ValleyPlayer.Controls {z=true});
             Advance(player,.93f);
             if(player.Diving || player.Underwater || player.Air<19.9f) return "Z did not surface and recover breath";
+            player.Warp(origin,0);
+            Advance(player,.36f);
+            var grip=gear.Grip;
+            player.Step(1/60f,new ValleyPlayer.Controls {toss=true});
+            Advance(player,.13f);
+            if(!gear.OwnsSelection || Vector3.Distance(grip,gear.Grip)<.04f) return "T skipped the launcher throw motion";
+            Advance(player,.40f);
+            if(gear.OwnsSelection || gear.Visible) return "The launcher did not leave the player's hands";
+            gear.RecoverLaunchers();
             return null;
         }
 

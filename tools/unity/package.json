@@ -1,7 +1,7 @@
 {
   "name": "valley-unity-transfer",
   "private": true,
-  "scripts": {"export": "node export.cjs && node gear-export.cjs", "sounds": "node audio-export.cjs"},
+  "scripts": {"export": "node export.cjs && node gear-export.cjs && node demo-export.cjs && node tape-font-export.cjs", "sounds": "node audio-export.cjs"},
   "dependencies": {"@napi-rs/canvas": "0.1.100", "sharp": "0.35.5"},
   "devDependencies": {"playwright": "1.62.1"}
 }

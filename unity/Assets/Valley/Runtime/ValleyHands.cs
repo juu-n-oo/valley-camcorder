@@ -135,5 +135,17 @@ namespace ValleyCamcorder
             return view.TransformPoint(new Vector3(side*(.26f-.08f*stretch+.05f*swing),
                 -.37f+.13f*Mathf.Max(0,swing),.32f+.25f*stretch));
         }
+
+        internal void Brace(float time,float amount,float dt)
+        {
+            for(int side=-1;side<=1;side+=2)
+            {
+                var phase=time*(side<0 ? 9.8f : 8.3f)+side;
+                var reach=view.TransformPoint(new Vector3(side*(.24f+.11f*Mathf.Sin(phase)),
+                    -.36f+.18f*Mathf.Cos(phase*.72f),.47f+.12f*Mathf.Sin(phase*.86f)));
+                var arm=side<0 ? left : right;
+                arm.Drive(view,reach,.28f+.24f*Mathf.Sin(phase),amount,dt,amount>.04f);
+            }
+        }
     }
 }

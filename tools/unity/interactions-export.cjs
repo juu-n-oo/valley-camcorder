@@ -38,7 +38,11 @@ function exportInteractions(folder,V,world,items,owners) {
       collapse:[site.tank,site.stand,site.fittings,site.intact,site.upperWall?.intact,...site.stairs].map(index).filter(id=>id>=0),
       fixtures:site.items.map(index).filter(id=>id>=0),
       lights:lights.slice(0,Math.max(1,Math.ceil(lights.length*.4))).map(index).filter(id=>id>=0),
-      monitors:site.monitors.map(index).filter(id=>id>=0),
+      monitors:site.monitors.map(index).filter(id=>id>=0), fragments:pack(site.debris),
+      alarms:site.alarms.map(alarm=>({at:alarm.at,mesh:unit(alarm.mesh)})),
+      sprinklers:site.sprinklers.map(({at,bottom,spread})=>({at,bottom,spread})),
+      surfaces:site.fireSurfaces.map(({at,normal,kind,size,priority})=>({at,normal,kind,size,priority:!!priority})),
+      reception:(site.reception??[]).map(index).filter(id=>id>=0),
       breaches:[site.rim,site.upperWall?.rim].filter(Boolean).map(breach)
     };
   });
@@ -46,12 +50,47 @@ function exportInteractions(folder,V,world,items,owners) {
   const floor=footingMap(V,world);
   const monitors=world.road.interior.monitors.filter(item=>index(item)>=0).map(item=>({id:index(item),views:item.cameras.map(
     camera=>({at:camera.at,forward:camera.forward}))}));
-  const tents=world.tents.filter(item=>index(item)>=0).map(item=>({id:index(item),...item.entry}));
+  const tents=world.tents.filter(item=>index(item)>=0).map(item=>({id:index(item),...item.entry,
+    ramp:item.ramp?[item.ramp.start,item.ramp.end,item.ramp.landing,item.ramp.width,item.ramp.base]:null}));
+  const props=world.props.filter(item=>index(item)>=0 && (item.support||item.installed||item.surface||item.fragile||item.kind==="tube"))
+    .map(item=>({id:index(item),parent:index(item.installed?.parent??item.support?.table),mounted:!!item.installed,
+      surface:item.surface?[item.surface.top,item.surface.rx,item.surface.rz]:null,fragile:!!item.fragile,health:item.hp??0,
+      air:item.air??0}));
+  const wheels=items.filter(item=>item.tire&&index(item.hub)>=0)
+    .map(item=>({id:index(item),hub:index(item.hub)}));
+  const vehicles=world.road.interior.vehicles.map(({at,yaw})=>({at,yaw}));
+  const trees=(world.fireTrees??[]).filter(({at,trunk})=>trunk && services.some(site=>distance(at,site.at)<24))
+    .map(({at,height,trunk})=>{
+      const {root,tip,base,end,sides}=trunk;
+      const bark=new V.Builder(), cap=.67;
+      bark.cylinder([0,0,0],V.times(V.minus(tip,root),cap),base+.009,V.mix(base,end,cap)+.009,
+        V.rgb(0x292621),sides,false);
+      return {at,root,height,mesh:unit({shape:bark,material:38})};
+    });
+  const places=locationData(V,world.road.layout);
   fs.mkdirSync(folder,{recursive:true});
   fs.writeFileSync(path.join(folder,"Fixtures.json"),
-    JSON.stringify({fixtures,services,debris,floor,monitors,tents}).replaceAll('},{"id":','},\n{"id":'));
+    JSON.stringify({fixtures,services,debris,floor,monitors,tents,props,wheels,vehicles,trees,places}).replaceAll('},{"id":','},\n{"id":'));
   fs.writeFileSync(path.join(folder,"Parts.valleymesh"),meshBundle(meshes,meshes.map((_,i)=>i)));
   console.log(`Exported ${fixtures.length} fixture links, ${services.length} service sites, and ${meshes.length} effects meshes.`);
+}
+
+function locationData(V,layout) {
+  const rooms=layout.buildings.map(b=>({name:b.name,at:[b.x,b.y,b.z],yaw:b.yaw,width:b.w,depth:b.d,storeys:b.storeys}));
+  const bridges=[layout.bridge,layout.lowerBridge].map(b=>({name:b.name,at:[b.x,b.y,b.z],yaw:b.yaw,
+    width:b.span,depth:b.half*2,storeys:1}));
+  const zones=layout.zones.map(([x,z,rx,rz,name])=>({name,at:[x,0,z],width:rx*2,depth:rz*2}));
+  const names=[["main","HWAYANGDONG ROAD"],["approach","BRIDGE APPROACH"],["foot","AMSEOJAE TRAIL"],
+    ["beyond","SOUTH CROSSING"],["templeRoad","CHAEUNAM ROAD"],["crossTrail","FOREST TRAIL"]];
+  const routes=names.map(([route,name])=>{
+    const path=layout[route], count=Math.ceil((path.max-path.min)/2)+1;
+    const points=Array.from({length:count},(_,i)=>{
+      const {x,z}=path.at(V.mix(path.min,path.max,i/(count-1)));
+      return [x,-z];
+    }).flat();
+    return {name,radius:path.half+.3,points};
+  });
+  return {level:V.roadLayout.storeyHeight,rooms,bridges,zones,routes};
 }
 
 function footingMap(V,world) {
