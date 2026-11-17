@@ -193,6 +193,9 @@ def place_thumb(scene, rig, skin, thumb, side, study, tap):
     press_frame, row, column = tap
     x, y = key_center(row, column)
     previous = THUMB_REST
+    low = THUMB_LOW.copy()
+    if "Typing thumb minimum yaw" in rig:
+        low[2] = math.radians(rig["Typing thumb minimum yaw"])
     for frame in range(FIRST, LAST + 1):
         scene.frame_set(frame)
         parent, links = placement_chain(rig, bones)
@@ -213,7 +216,7 @@ def place_thumb(scene, rig, skin, thumb, side, study, tap):
         phase = phase * phase * (3 - 2 * phase)
         target = rest + (contact - rest) * phase
         preferred = THUMB_REST + (THUMB_PRESS - THUMB_REST) * phase
-        solved = solve_contact(measure, target, preferred, THUMB_LOW, THUMB_HIGH, initial=previous)
+        solved = solve_contact(measure, target, preferred, low, THUMB_HIGH, initial=previous)
         pitch, roll, yaw, middle, end = solved
         control.rotation_euler = (pitch, roll * side, yaw * side)
         knuckle.rotation_euler = (middle, 0, 0)
