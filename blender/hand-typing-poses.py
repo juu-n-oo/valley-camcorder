@@ -25,8 +25,15 @@ EVENTS = (
 )
 
 HOVER = ((13, 31, 18), (16, 33, 19), (18, 32, 18), (19, 31, 15))
-LOW = np.radians((-7, -24, 6, 8))
-HIGH = np.radians((59, 24, 73, 59))
+LOW = np.radians((-7, -24, 6, 4))
+HIGH = np.radians((59, 24, 73, 55))
+THUMB_CHANNELS = ("Thumb.Base", "Thumb.MCP", "Thumb.IP")
+THUMB_REST = np.radians((18, -15, 17, 12, 10))
+THUMB_PRESS = np.radians((26, -15, 8, 12, 11))
+THUMB_LOW = np.radians((4, -37, 4, 3, 2))
+THUMB_HIGH = np.radians((39, 11, 37, 43, 35))
+SPACE_TAPS = ((162, "L", 4, 5), (166, "R", 4, 7))
+SPACE_PAD_OFFSET = -.0027
 
 
 def key_center(row, column):
@@ -54,46 +61,67 @@ def finger_pad(rig, skin, finger):
     return tuple(indices), np.array(points[::3])
 
 
-def fingertip(parent, link, pad, angles):
-    pitch, spread, middle, tip = angles
+def contact_transform(parent, links, pad, rotations):
     matrix = parent
-    for basis, (bend, yaw) in zip(link, ((pitch, spread), (middle, 0), (tip, 0))):
-        matrix = matrix @ basis @ Euler((bend, 0, yaw), "XYZ").to_matrix().to_4x4()
+    for basis, angles in zip(links, rotations):
+        matrix = matrix @ basis @ Euler(angles, "XYZ").to_matrix().to_4x4()
     transform = np.asarray(matrix, dtype=float)
     points = pad @ transform[:3, :3].T + transform[:3, 3]
     lowest = points[:, 2].min()
-    bottom = points[points[:, 2] <= lowest + .0010]
-    return np.array((bottom[:, 0].mean(), bottom[:, 1].mean(), lowest))
+    weights = np.exp(-(points[:, 2] - lowest) / .00047)
+    center = np.average(points, axis=0, weights=weights)
+    center[2] = lowest
+    return center
+
+
+def placement_chain(rig, bones):
+    return (rig.matrix_world @ bones[0].parent.matrix,
+            [bone.parent.bone.matrix_local.inverted() @ bone.bone.matrix_local for bone in bones])
+
+
+def solve_contact(measure, target, preferred, low, high, initial=None):
+    target = np.asarray(target)
+    angles = preferred.copy() if initial is None else initial.copy()
+    epsilon = .003
+    steps = np.eye(len(angles)) * epsilon
+    penalty = .000008
+    damping = np.eye(len(angles)) * penalty
+
+    def cost(angles, residual):
+        return residual @ residual + penalty * np.sum((preferred - angles)**2)
+
+    for _ in range(16):
+        tip = measure(angles)
+        error = target - tip
+        if np.linalg.norm(error) < .00028:
+            break
+        jacobian = np.column_stack([(measure(angles + step) - tip) / epsilon for step in steps])
+        move = np.linalg.solve(jacobian.T @ jacobian + damping,
+                               jacobian.T @ error + damping @ (preferred - angles))
+        move = np.clip(move, -.20, .20)
+        current = cost(angles, error)
+        # A bounded step prevents a close thumb from snapping into a distant pose.
+        for scale in (1, .5, .25, .125):
+            candidate = np.clip(angles + scale * move, low, high)
+            if cost(candidate, target - measure(candidate)) < current:
+                angles = candidate
+                break
+        else:
+            break
+    return angles
 
 
 def reach(rig, finger, pad, target):
     bones = joints(rig, finger)
-    parent = rig.matrix_world @ bones[0].parent.matrix
-    links = [b.parent.bone.matrix_local.inverted() @ b.bone.matrix_local for b in bones]
+    parent, links = placement_chain(rig, bones)
     base = np.array((bones[0].rotation_euler.x, bones[0].rotation_euler.z,
                      bones[1].rotation_euler.x, bones[2].rotation_euler.x))
-    angles = base.copy()
-    goal = np.asarray(target)[[0, 2]]
-    reach_delta = target[1] - fingertip(parent, links, pad, base)[1]
-    # The near and far rows use different arch shapes, while the wrist
-    # remains above the keyboard and carries the forward reach.
-    angles[2] -= np.clip(reach_delta * 6, -.12, .12)
-    angles[3] -= np.clip(reach_delta * 3, -.06, .06)
-    epsilon = .002
-    damping = np.eye(2) * .000025
-    for _ in range(14):
-        tip = fingertip(parent, links, pad, angles)[[0, 2]]
-        error = goal - tip
-        if np.linalg.norm(error) < .00035:
-            break
-        jacobian = np.column_stack([
-            (fingertip(parent, links, pad, angles + step)[[0, 2]] - tip) / epsilon
-            for step in np.eye(4)[:2] * epsilon
-        ])
-        move = np.linalg.solve(jacobian.T @ jacobian + damping,
-                               jacobian.T @ error + damping @ (base[:2] - angles[:2]))
-        angles[:2] = np.clip(angles[:2] + np.clip(move, -.21, .21), LOW[:2], HIGH[:2])
-    pitch, spread, middle, tip = angles
+
+    def measure(angles):
+        pitch, spread, middle, tip = angles
+        return contact_transform(parent, links, pad, ((pitch, 0, spread), (middle, 0, 0), (tip, 0, 0)))
+
+    pitch, spread, middle, tip = solve_contact(measure, target, base, LOW, HIGH)
     bones[0].rotation_euler = (pitch, 0, spread)
     bones[1].rotation_euler.x = middle
     bones[2].rotation_euler.x = tip
@@ -106,23 +134,27 @@ def pad_points(skin, indices):
     return [world @ evaluated.data.vertices[index].co for index in indices]
 
 
-def align_pad(rig, skin, bone, indices, target):
+def fit_pad_height(skin, bone, indices, height, limits):
     points = pad_points(skin, indices)
     lowest = min(point.z for point in points)
-    # Correct the active finger rather than lowering the neighboring fingers.
+    # Refine the articulated estimate with the evaluated skin and its modifier stack.
     for _ in range(4):
-        if abs(lowest - target[2]) < .00018:
+        if abs(lowest - height) < .00018:
             break
         angles = bone.rotation_euler
         angles.x += .007
         slope = (min(point.z for point in pad_points(skin, indices)) - lowest) / .007
-        change = (target[2] - lowest) / min(-.029, slope)
+        change = (height - lowest) / min(-.012, slope)
         angles.x += max(-.14, min(.14, change)) - .007
-        angles.x = min(float(HIGH[0]), max(float(LOW[0]), angles.x))
+        angles.x = min(limits[1], max(limits[0], angles.x))
         points = pad_points(skin, indices)
         lowest = min(point.z for point in points)
     bottom = [point for point in points if point.z <= lowest + .0006]
-    contact = sum(bottom, Vector()) / len(bottom)
+    return sum(bottom, Vector()) / len(bottom)
+
+
+def align_pad(rig, skin, bone, indices, target):
+    contact = fit_pad_height(skin, bone, indices, target[2], (LOW[0], HIGH[0]))
     rig.location.x += target[0] - contact.x
     rig.location.y += target[1] - contact.y
 
@@ -140,17 +172,58 @@ def hover(rig, fingers, side, row, shift, effort):
             bone.rotation_euler.x = math.radians(degree)
     rig.pose.bones["Forearm"].rotation_euler.y = math.radians(side * (effort - .5) * 1.1)
     rig.pose.bones["Wrist"].rotation_euler.x = math.radians(.4 + 1.1 * effort)
-    rig.pose.bones["Thumb.Base"].rotation_euler = tuple(map(math.radians, (8, -14 * side, 20 * side)))
-    rig.pose.bones["Thumb.MCP"].rotation_euler.x = math.radians(16)
-    rig.pose.bones["Thumb.IP"].rotation_euler.x = math.radians(13)
+
 
 
 def key_pose(rig, frame):
     for path in ("location", "rotation_euler"):
         rig.keyframe_insert(data_path=path, frame=frame, group="Keyboard placement")
     for bone in rig.pose.bones:
-        if bone.name not in ("Thumb.CMC", "Thumb.Web"):
+        if bone.name in ("Thumb.CMC", "Thumb.Web") or (bone.name in THUMB_CHANNELS and frame >= FIRST):
+            continue
+        bone.keyframe_insert(data_path="rotation_euler", frame=frame, group=bone.name)
+
+
+def place_thumb(scene, rig, skin, thumb, side, study, tap):
+    indices, pad = finger_pad(rig, skin, thumb)
+    bones = joints(rig, thumb)
+    control, knuckle, tip = (rig.pose.bones[name] for name in THUMB_CHANNELS)
+    lift, start, gain = study["THUMB_LIFT"]
+    lift, start = math.radians(lift), math.radians(start)
+    press_frame, row, column = tap
+    x, y = key_center(row, column)
+    previous = THUMB_REST
+    for frame in range(FIRST, LAST + 1):
+        scene.frame_set(frame)
+        parent, links = placement_chain(rig, bones)
+
+        def measure(angles):
+            pitch, roll, yaw, middle, end = angles
+            pitch = max(pitch, lift + gain * max(0, yaw - start))
+            return contact_transform(parent, links, pad,
+                                     ((pitch, roll * side, yaw * side), (middle, 0, 0), (end, 0, 0)))
+
+        # The idle thumb stays near the space bar when the wrist advances.
+        rest = measure(THUMB_REST)
+        rest[0] -= .0016 * side
+        rest[1] -= np.clip(.34 * (rig.location.y + .151), -.005, .006)
+        rest[2] += .0015
+        contact = np.array((x, y + SPACE_PAD_OFFSET, KEY_TOP - KEY_TRAVEL + .0003))
+        phase = max(0, 1 - abs(frame - press_frame) / 3)
+        phase = phase * phase * (3 - 2 * phase)
+        target = rest + (contact - rest) * phase
+        preferred = THUMB_REST + (THUMB_PRESS - THUMB_REST) * phase
+        solved = solve_contact(measure, target, preferred, THUMB_LOW, THUMB_HIGH, initial=previous)
+        pitch, roll, yaw, middle, end = solved
+        control.rotation_euler = (pitch, roll * side, yaw * side)
+        knuckle.rotation_euler = (middle, 0, 0)
+        tip.rotation_euler = (end, 0, 0)
+        if frame == press_frame:
+            fit_pad_height(skin, knuckle, indices, target[2], (THUMB_LOW[3], THUMB_HIGH[3]))
+            solved[3] = knuckle.rotation_euler.x
+        for bone in (control, knuckle, tip):
             bone.keyframe_insert(data_path="rotation_euler", frame=frame, group=bone.name)
+        previous = solved
 
 
 def animate(scene, right, left, study):
@@ -188,6 +261,8 @@ def animate(scene, right, left, study):
             scene.frame_set(frame)
             hover(rig, fingers, side, 2, 0, 0)
             key_pose(rig, frame)
+        tap = next((frame, row, column) for frame, hand, row, column in SPACE_TAPS if hand == label)
+        place_thumb(scene, rig, skin, study["FINGERS"][-1], side, study, tap)
         animation = rig.animation_data
         animation.action.name = "Gesture studies."+label
         for curve in animation.action.layers[0].strips[0].channelbag(animation.action_slot).fcurves:
@@ -197,4 +272,5 @@ def animate(scene, right, left, study):
                 elif key.co.x >= FIRST:
                     key.handle_left_type = key.handle_right_type = "AUTO_CLAMPED"
             curve.update()
-    return tuple((frame, row, column) for frame, _, _, row, column in EVENTS)
+    finger_strokes = tuple((frame, row, column) for frame, _, _, row, column in EVENTS)
+    return finger_strokes + tuple((frame, row, column) for frame, _, row, column in SPACE_TAPS)

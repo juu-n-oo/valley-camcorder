@@ -33,9 +33,9 @@ def gesture_keys(study):
     # The palm rolls as the index straightens toward the indicated spot.
     thumb, hinges = study["FIST_THUMB"]
     yield 117, ((4, 7, 3), (48, 70, 42), (52, 74, 45), (57, 78, 47)), (40, -20, -18), (23, 48), (-1, -9, -9), -10
-    yield 124, ((0, 3, 1), (74, 90, 53), (77, 95, 59), (77, 95, 61)), thumb, hinges, (0, -14, -16), -15
-    yield 132, ((1, 3, 2), (74, 92, 54), (77, 95, 60), (77, 96, 61)), thumb, hinges, (.7, -15, -16), -16
-    yield 138, ((2, 4, 2), (72, 89, 52), (77, 95, 59), (77, 95, 60)), thumb, hinges, (-.5, -14, -15), -14
+    yield 124, ((0, 3, 1), (74, 90, 53), (77, 95, 59), (75, 94, 57)), thumb, hinges, (0, -14, -16), -15
+    yield 132, ((1, 3, 2), (74, 92, 54), (77, 95, 60), (75, 95, 57)), thumb, hinges, (.7, -15, -16), -16
+    yield 138, ((2, 4, 2), (72, 89, 52), (77, 95, 59), (75, 94, 56)), thumb, hinges, (-.5, -14, -15), -14
 
 
 def animate(rig, study, side=1):

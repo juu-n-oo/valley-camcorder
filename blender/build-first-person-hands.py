@@ -799,7 +799,7 @@ def mirrored(original, rig, collection):
     return left
 
 
-def drive_fold(key, rig, joint, start, span):
+def drive_fold(key, rig, joint, start, span, *, release=None):
     driver = key.driver_add("value").driver
     driver.type = "SCRIPTED"
     variable = driver.variables.new()
@@ -807,7 +807,24 @@ def drive_fold(key, rig, joint, start, span):
     variable.type = "SINGLE_PROP"
     variable.targets[0].id = rig
     variable.targets[0].data_path = rig.pose.bones[joint].path_from_id("rotation_euler")+"[0]"
-    driver.expression = f"min(1,max(0,(bend-{start})/{span}))"
+    rise = f"min(1,max(0,(bend-{start})/{span}))"
+    if release is not None:
+        end, width = release
+        rise += f"*min(1,max(0,({end}-bend)/{width}))"
+    driver.expression = rise
+
+
+def thumb_web_shape(skin, rig, side):
+    key = skin.shape_key_add(name="First web settles as the thumb bends", from_mix=False)
+    for vertex in skin.data.vertices:
+        x, y, z = mirror(vertex.co, side)
+        dorsal = 1 - smooth(-.003, .007, z)
+        web = gaussian(x - .038, .012) * gaussian(y - .072, .014) * dorsal
+        pad = gaussian(x - .042, .010) * gaussian(y - .051, .012) * smooth(.004, .012, z)
+        # Flatten the dorsal fold and carry a small amount of tissue into the thumb pad.
+        offset = Vector((-.00042 * web, -.00032 * web, .00088 * web + .00028 * pad))
+        key.data[vertex.index].co += mirror(offset, side)
+    drive_fold(key, rig, "Thumb.CMC", .16, .26, release=(.86, .24))
 
 
 def flex_creases(skin, rig, side):
@@ -838,6 +855,7 @@ def flex_creases(skin, rig, side):
         amount = gaussian(x+.0245,.007)*gaussian(y-.085,.008)*smooth(.006,.010,z)
         pad.data[vertex.index].co.z -= .00065*amount
     drive_fold(pad,rig,"Little.MCP",.99,.26)
+    thumb_web_shape(skin, rig, side)
 
 
 FIST_BENDS = ((69,90,52),(75,94,59),(77,95,61),(75,96,66))
