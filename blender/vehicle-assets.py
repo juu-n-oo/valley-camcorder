@@ -35,6 +35,12 @@ def _finish(slot,paint=None,optic=None,override=None):
         principled.inputs["Roughness"].default_value=.24
         principled.inputs["Metallic"].default_value=.36 if override=="Red reflector" else .49
         principled.inputs["Coat Weight"].default_value=.44
+    elif override=="Polished emblem":
+        principled.inputs["Roughness"].default_value=.217
+        principled.inputs["Metallic"].default_value=.77
+    elif override=="Embossed emblem":
+        principled.inputs["Roughness"].default_value=.44
+        principled.inputs["Specular IOR Level"].default_value=.32
     elif override=="Mirror glass":
         principled.inputs["Roughness"].default_value=.037
         principled.inputs["Metallic"].default_value=1

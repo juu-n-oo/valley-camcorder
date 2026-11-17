@@ -25,6 +25,17 @@ def _door_card(name,side,front,lo,hi):
                         [(x,y) for x in (blend(-.447,.450,t) for t in _range(27))
                          for y in (blend(-.229,.269,t) for t in _range(23))],
                         lambda u,v:board(u,v,.029),SEDAN_TRIM,flip=side<0)
+    def shoulder_roll(u,v):
+        z=blend(lo+.062,hi-.055,u)
+        edge_x,edge_y,_=_side(side,z,1)
+        inner=board((z-mid)/span,.239,.031)
+        outer=(edge_x-side*.050,edge_y+.013,z)
+        return _add(_lerp(inner,outer,v),(0,.019*sin(pi*v),0))
+
+    _panel(name,"carLeather","Padded door top joining the molded card and window ledge",
+           38,10,shoulder_roll,SEDAN_TRIM,flip=side>0)
+    _cord(name,"plain","Inner window waist seal",
+          [shoulder_roll(u,1) for u in _range(38)],.0044,SEDAN_RUBBER)
     def map_pocket(u,v,d):
         return board(u,v-.170,d)
     _bezel(name,"carLeather","Return around recessed map pocket",pocket,map_pocket,
@@ -157,15 +168,29 @@ def _headliner_details(roof):
                   .146,.061,.007,CABIN_BEIGE,"y",.40)
         hinge=[folded(.212,.075,.005),folded(.242,.069,.008),folded(.248,.059,.019)]
         _cord(roof,"carMetal","Folded visor hinge rod",hinge,.0062,rgb(0xa7a79a),sides=9)
-        _pill(roof,"carLeather","Sun visor inner retaining clip",folded(-.204,.068,-.002),.035,.022,.022,
+        clip=folded(-.204,.054,-.002)
+        _pill(roof,"carLeather","Sun visor inner retaining clip",clip,.035,.022,.022,
               rgb(0xa79f8b),"y",.52)
+        for label,at in (("Outer visor hinge flange",hinge[-1]),("Inner visor clip base",clip)):
+            px,py,pz=at
+            z=min(pz,.268)
+            height=_roof_height(px,z)-.028
+            _cord(roof,"carLeather",label,[at,(px,height,z)],.0136,rgb(0xa59b85),sides=9)
         handle=[(side*.615,1.358,-.215),(side*.596,1.335,-.190),(side*.593,1.329,-.030),
                 (side*.616,1.349,-.001)]
         _cord(roof,"carLeather","Shaped roof grab handle",catmull(handle,5),.0125,CABIN_BEIGE,sides=12)
-        for p in (handle[0],handle[-1]):
-            _pill(roof,"carLeather","Grab handle pivot cap",p,.040,.040,.020,rgb(0xa9a18e),"y",.49)
-        _pill(roof,"plain","Small A-pillar tweeter grille",(side*.764,1.026,.720),
-              .039,.041,.009,rgb(0x373e3b),"z",.74)
+        for at in (handle[0],handle[-1]):
+            px,py,pz=at
+            end=_roof_height(px,pz)-.025
+            _pill(roof,"carLeather","Recessed grab handle mounting boss",
+                  (px,(py+end)*.5,pz),.045,.043,end-py+.012,rgb(0xa9a18e),"y",.49)
+    def console_headliner(u,v,d):
+        z=.146+v
+        return u,_roof_height(u,z)-.034-d,z
+
+    _bezel(roof,"carLeather","Map light console flange seated against headliner",
+           _elliptic(.266,.223,.53,44),console_headliner,
+           [(.98,-.005),(1,.002),(.977,.014),(.915,.022)],rgb(0xa9a08e),True)
     _pill(roof,"carLeather","Rounded molded overhead console",(0,1.342,.148),.268,.239,.059,
           rgb(0xb4aa95),"y",.54)
     well=_outline([(-.108,-.046),(-.103,.044),(-.076,.058),(.077,.058),(.103,.042),
@@ -313,8 +338,17 @@ def _upholstery():
         _cord(name,"carLeather","Elastic upper pocket rim",[pocket(u,1) for u in _range(27)],
               .00225,rgb(0xa49a85),sides=5)
         _stitch(name,"Seatback pocket bottom stitch",lambda t:pocket(t,.025),(0,0,-1))
+        box(name,"plain","Seat pan under the front cushion",(x,.359,.148),
+            (.471,.039,.506),rgb(0x474740),.014)
         for dx in (-.170,.170):
             box(name,"plain","Stamped sliding seat rail",(x+dx,.270,.148),(.044,.040,.512),rgb(0x383a37),.006)
+            for z in (-.041,.327):
+                box(name,"carMetal","Pressed mount between seat pan and slider",(x+dx,.319,z),
+                    (.045,.088,.068),rgb(0x55544b),.006)
+                box(name,"plain","Bolted floor rail foot",(x+dx,.258,z+.028),
+                    (.064,.020,.088),rgb(0x393b34),.004)
+                lathe(name,"carMetal","Hex seat rail floor fastener",[(0,.008,.008),(.005,.008,.008)],
+                      rgb(0x777568),6,(x+dx,.269,z+.062))
         base=_outline([(-.250,-.051),(-.250,.024),(-.226,.060),(.168,.060),(.239,.038),
                        (.257,.003),(.218,-.035),(-.176,-.056)],4)
         _bezel(name,"carLeather","Sculpted seat base side molding",base,
@@ -340,8 +374,17 @@ def _upholstery():
             _pill(name,"carLeather","Driver seat recline release",
                   (x+side*.271,.353,-.047),.118,.041,.027,rgb(0xc4bba2),"x",.43)
         else:
-            _pill(name,"carLeather","Passenger seat recline lever",(x-side*.268,.429,-.134),
-                  .073,.028,.019,rgb(0xb9af97),"x",.61)
+            _pill(name,"carLeather","Passenger recline pivot at seat base",(x+side*.256,.384,-.068),
+                  .041,.038,.021,rgb(0xa59d8a),"x",.84)
+            _pill(name,"carLeather","Passenger seat recline lever",(x+side*.275,.385,-.046),
+                  .079,.032,.024,rgb(0xb9af97),"x",.61)
+        if side>0:
+            root=_add(front(.982,.392),(-.003,0,-.045))
+            _pill(name,"carLeather","Manual lumbar lever mounting collar",root,.025,.026,.019,
+                  rgb(0xaa9f87),"x",.85)
+            tube(name,"carLeather","Curved driver lumbar lever",
+                 [(root,.010,.014),(_add(root,(.014,.014,-.014)),.009,.008),
+                  (_add(root,(.021,.043,-.028)),.010,.007)],rgb(0xc0b69b),sides=10,density=4)
         front_bar=[(x-.133,.307,.405),(x-.138,.296,.464),(x+.135,.296,.460),(x+.142,.311,.402)]
         _cord(name,"plain","Bent slide release under seat",catmull(front_bar,4),.0061,rgb(0x292c2a),sides=8)
         receiver=(x-side*.277,.445,.007)
@@ -360,8 +403,10 @@ def _upholstery():
         rows_mesh(name,"fabric","B-pillar woven front belt",
                   [[_add(p,(0,0,-.021)),_add(p,(0,0,.021))] for p in belt],
                   rgb(0x968c7e),ring=False,caps=False)
-        _pill(name,"carLeather","Adjustable upper seatbelt guide",(side*.721,1.218,-.255),
-              .053,.072,.026,CABIN_BEIGE,"x",.50)
+        _pill(name,"carLeather","Seat belt height-adjustment plate inset in B-pillar trim",
+              (side*.734,1.193,-.261),.068,.132,.037,rgb(0x938c79),"x",.55)
+        _pill(name,"carLeather","Adjustable upper seatbelt guide",(side*.716,1.216,-.255),
+              .053,.072,.031,CABIN_BEIGE,"x",.50)
         _pill(name,"carMetal","Seatbelt tongue",(side*.751,.905,-.277),.048,.037,.007,SEDAN_ALLOY,"x",.57)
 
     cushion("Broad rear seat cushion",(0,-.872),1.42,.548,True)
@@ -429,24 +474,99 @@ def _dash_face(x,y,depth=0):
     return (x,y,_profile(profile,y,1)+.018*(abs(x)/.75)**4-depth)
 
 
-def _vent(name,x,y,width,height,outer=False):
-    outline=_elliptic(width,height,.37,28)
-    def face(u,v,d):
-        return _dash_face(x+u,y+v,d)
-    _bezel(name,"carLeather" if outer else "carWood","Rounded vent insert",outline,face,
-           [(1,.008),(.97,.017),(.88,.019)],SEDAN_TRIM if outer else SEDAN_WALNUT,True)
-    _bezel(name,"plain","Black vent recess",outline,face,[(.89,.020),(.85,.024)],SEDAN_BLACK,True)
-    _bezel(name,"carMetal","Fine vent lip",outline,face,[(.90,.022),(.891,.025),(.864,.025)],rgb(0x929c98))
-    for i in range(6):
-        offset=(i-2.5)*height*.126
-        half=width*.386*(1-.18*abs(offset/height))
-        _cord(name,"carMetal" if outer else "gloss","Molded horizontal vent louver",
-              [face(half*(2*t-1),offset+.003*sin(pi*t),.026) for t in _range(10)],
-              .0026,rgb(0x9ca197 if outer else 0x6b7777))
-    for t in (-.26,-.1,.10,.26):
-        _cord(name,"plain","Vertical vent guide",[face(t*width,-height*.348,.023),face(t*width,height*.345,.024)],
-              .0018,rgb(0x363b38))
-    _pill(name,"plain","Vent thumb wheel",face(width*.07,-.003,.032),width*.26,.013,.006,DASH_FACE)
+_DASH_WIDTH=.817
+_DASH_FASCIA=((.737,.695),(.787,.667),(.840,.659),(.887,.667),(.922,.696),(.948,.747))
+_DASH_RETURN=((.949,.784),(.929,.867),(.899,.931),(.851,.979),(.744,1.011),(.716,.821))
+_DASH_END_OUTLET=_outline([(-.032,-.047),(-.037,-.034),(-.036,.031),(-.032,.049),
+                           (-.017,.059),(.019,.056),(.034,.048),(.038,.033),
+                           (.033,-.038),(.022,-.053),(-.018,-.055)],4)
+
+
+def _dash_skin(x,y,z):
+    taper=smooth(.61,.82,abs(x))
+    sweep=.010*exp(-((x+.479)/.27)**2)
+    return x,y-.031*taper+sweep*(1-smooth(.886,.951,y)),z+.026*taper
+
+
+def _dash_fascia(x,y,depth=0):
+    return _dash_skin(x,y,_profile(_DASH_FASCIA,y,1)+depth)
+
+
+def _dash_outer_vent(side,u,v,depth=0):
+    x=side*(.762+u+.080*v)
+    return _dash_fascia(x,.867+v,depth)
+
+
+def _end_dash_vent(name,side):
+    role="Driver" if side>0 else "Passenger"
+    face=lambda u,v,d:_dash_outer_vent(side,u,v,d)
+    ring=_DASH_END_OUTLET
+    _bezel(name,"carLeather",role+" edge vent flanged into dashboard",ring,face,
+           [(1.080,.001),(1.060,-.003),(1,-.005),(.919,-.005),(.874,.004)],rgb(0x959486))
+    _bezel(name,"plain",role+" airflow duct and recessed seat",ring,face,
+           [(.884,.002),(.855,.010),(.781,.032),(.716,.039)],rgb(0x222622),True)
+    for i in range(5):
+        v=-.020+i*.014
+        half=.0285-.0019*abs(i-2)
+        section=((-.0024,.016),(.0016,.016),(.0024,.003),(.0013,-.0031),
+                 (-.0008,-.0035),(-.0025,.0014))
+        rows=[[face(blend(-half,half,u),v+h+.0016*sin(pi*u),depth) for h,depth in section]
+              for u in _range(15)]
+        rows_mesh(name,"carLeather","Molded horizontal "+role.lower()+" vent louver",rows,rgb(0x9d9b8c))
+    for u in (-.019,.019):
+        _cord(name,"plain","Vent linkage seated in the duct",
+              [face(u,-.037,.038),face(u,-.028,.016),face(u,.038,.016),face(u,.045,.034)],
+              .0024,rgb(0x484a41))
+    wheel=face(-.006,-.038,-.0028)
+    _pill(name,"plain","Recessed end vent thumbwheel seat",face(-.006,-.038,.0015),
+          .035,.013,.011,rgb(0x41423b),"z",.52)
+    _pill(name,"carLeather","Ribbed end vent control",wheel,.027,.0089,.008,
+          rgb(0xa3a18d),"z",.72)
+    for i in range(9):
+        u=-.006+(i-4)*.0024
+        _cord(name,"gloss","Fine thumbwheel ridge",[face(u,v,-.0072) for v in (-.041,-.036)],
+              .00048,rgb(0x6f7063),sides=4)
+
+
+def _dash_shell(name):
+    count=48
+
+    def section(u,v):
+        return blend(-_DASH_WIDTH,_DASH_WIDTH,u),blend(_DASH_FASCIA[0][0],_DASH_FASCIA[-1][0],v)
+
+    holes=[[(side*(.762+.980*u+.080*.980*v),.867+.980*v) for u,v in _DASH_END_OUTLET]
+           for side in (-1,1)]
+    _perforated_panel(name,"carLeather","Padded dashboard with two outer vent apertures",count,28,
+                      section,_dash_fascia,holes,rgb(0x858578),flip=True)
+    profile=(_DASH_FASCIA[-1],*_DASH_RETURN,_DASH_FASCIA[0])
+    rows_mesh(name,"carLeather","Wrapped top and underside of the padded dash",
+              [[_dash_skin(blend(-_DASH_WIDTH,_DASH_WIDTH,u),y,z) for y,z in profile]
+               for u in _range(count+1)],rgb(0x858578),ring=False,caps=False)
+
+    for side in (-1,1):
+        x=side*_DASH_WIDTH
+        end_trace=[_dash_fascia(x,y) for _,y in (section(0,t) for t in _range(29))]
+        end_trace.extend(_dash_skin(x,y,z) for y,z in _DASH_RETURN)
+        perimeter=[(z,y) for _,y,z in end_trace]
+        duct_center=(.819,.844)
+        duct=_elliptic(.073,.069,.85,42)
+
+        def end(z,y):
+            return x,y,z
+
+        _perforated_surface(name,"carLeather","Dashboard end face and door-demister opening",perimeter,
+                            [_offset_outline(duct,duct_center)],[],end,rgb(0x7f7d6f),flip=side>0)
+
+        def duct_face(u,v,d):
+            return side*(_DASH_WIDTH+d),duct_center[1]+v,duct_center[0]+u
+
+        _bezel(name,"plain","Recessed round door demister port",duct,duct_face,
+               [(1,0),(1.015,.003),(.930,.004),(.772,.001),(.698,-.015)],rgb(0x292d29))
+        _bezel(name,"plain","Shadowed back of door demister port",duct,duct_face,
+               [(.697,-.015),(.635,-.020)],rgb(0x151917),True)
+        _pill(name,"carLeather","Round blanking cap at top of dash end face",
+              (side*(_DASH_WIDTH+.001),.895,.802),.032,.032,.004,rgb(0x919082),"x",1)
+        _end_dash_vent(name,side)
 
 
 def _steering(name):
@@ -519,6 +639,11 @@ def _steering(name):
           for t in list(_range(25))[:-1]],.0018,SEDAN_CHROME,closed=True)
     _pill(name,"carLeather","Leather key fob",(.298,.682,.623),.023,.049,.011,rgb(0x64442c))
     for label,x,w,h in (("Brake",.521,.085,.060),("Accelerator",.362,.046,.110)):
+        pivot=(x,.581,.801)
+        box(name,"plain",label+" under-dash pivot bracket",pivot,(.046,.083,.092),rgb(0x43443d),.006)
+        tube(name,"plain",label+" pedal arm from pivot to pad",[
+            (pivot,.013,.012),((x,.455,.838),.012,.009),((x,.311,.780),.013,.010)
+        ],rgb(0x343630),sides=8,density=5)
         _pill(name,"plain",label+" textured rubber pad",(x,.310,.769),w,h,.025,SEDAN_RUBBER)
         for t in _range(6):
             y=.310+blend(-h*.34,h*.34,t)
@@ -608,15 +733,8 @@ def _tunnel(name):
 
 def _dashboard():
     name=_sedan_asset("dashboard")
-    cross_section=[(.737,.695),(.787,.667),(.840,.659),(.887,.667),(.922,.696),(.948,.747),
-                   (.949,.784),(.929,.867),(.899,.931),(.851,.979),(.744,1.011),(.716,.821)]
-    rows=[]
-    for t in _range(46):
-        x=(2*t-1)*.817
-        taper=smooth(.61,.82,abs(x))
-        sweep=.010*exp(-((x+.479)/.27)**2)
-        rows.append([(x,y-.031*taper+sweep*(1-smooth(.886,.951,y)),z+.026*taper) for y,z in cross_section])
-    rows_mesh(name,"carLeather","Padded dash top with sloping passenger fascia",rows,rgb(0x868678))
+    _dash_shell(name)
+    _dash_bulkhead(name)
     knee=_outline([(-.296,-.053),(-.290,.038),(-.243,.079),(.229,.087),(.286,.050),
                     (.291,-.041),(.233,-.064),(-.235,-.064)],4)
     _bezel(name,"carLeather","Tapered driver knee bolster",knee,
@@ -663,6 +781,25 @@ def _footwells():
     _panel(foot,"fabric","Fitted carpet following sill and toe board",36,64,carpet,SEDAN_CARPET,flip=True)
 
 
+def _dash_bulkhead(name):
+    def firewall(u,v):
+        side=2*u-1
+        y=blend(.428,.929,v)-.008*side*side
+        z=blend(1.082,.891,smooth(.30,1,v))+.017*(1-side*side)
+        return side*blend(.783,.907,smooth(.14,.80,v)),y,z
+
+    _panel(name,"plain","Stamped firewall and cowl behind the dash",40,25,firewall,
+           rgb(0x363832),flip=True)
+    for side in (-1,1):
+        def jamb(u,v):
+            edge=firewall(0 if side<0 else 1,v)
+            brace=(side*blend(.800,.897,v),edge[1],blend(.955,.825,v))
+            return _lerp(edge,brace,u)
+
+        _panel(name,"carLeather","Inner A-pillar return behind the door hinge",
+               10,24,jamb,rgb(0x686859),flip=side<0)
+
+
 def _glove_box():
     name=_sedan_asset("glove_box",(-.474,.589,.841))
     flap=_outline([(-.258,-.055),(-.256,.059),(-.237,.077),(.221,.077),(.252,.064),
@@ -699,6 +836,13 @@ def _glove_box():
                       (.237,.086),(.156,.044),(.085,.024),(-.087,.024),(-.158,.045)],3)
     _bezel(name,"carLeather","Open glove compartment tray floor",outline,tray,
            [(1,-.008),(1,-.004),(.972,0)],rgb(0x525047),True)
+    for side in (-1,1):
+        x=pivot[0]+side*.228
+        knuckle=[(x,.601,.728),(x,.582,.758),(x,.574,.804),(x,.589,.841)]
+        tube(name,"carLeather","Glovebox hinge arm from panel into pivot",
+             [(p,.012,.009) for p in knuckle],rgb(0x6d6657),sides=10,density=4)
+        lathe(name,"carLeather","Glovebox rotating hinge knuckle",
+              [(-.015,.010,.010),(.015,.010,.010)],rgb(0x5f584d),16,(x,.589,.841),"x")
     wall=((.075,-.005),(.208,-.010),(.210,.073),(.188,.086),(.132,.057),(.079,.013))
     for side in (-1,1):
         rows_mesh(name,"carLeather","Shaped triangular glovebox side retainer",

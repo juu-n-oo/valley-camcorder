@@ -56,9 +56,10 @@ def _meter_dial(name,x,y,z,radius,labels,units):
     dial=_pill(name,"plain","Recessed instrument dial",(x,y,z),
                2.062*radius,2.062*radius,.0042,trim,"z",1)
     dial["finish_override"]="Matte meter face"
-    _cord(name,"gloss","Circular painted gauge scale surround",
-          [(x+radius*cos(t),y+radius*sin(t),z-.0027) for t in (tau*i/72 for i in range(72))],
-          .0015,rgb(0x353933),closed=True,sides=5)
+    lathe(name,"plain","Rounded black gauge rim rolled into the dial face",
+          [(.001,radius*1.031,radius*1.031),(-.0023,radius*1.024,radius*1.024),
+           (-.0038,radius*1.002,radius*1.002),(-.0020,radius*.987,radius*.987)],
+          rgb(0x30342e),72,(x,y,z),"z",caps=False)
     # The first and last tick are down to either side of the center caps.
     def polar(t,r,depth=.0032):
         a=3.78-4.40*t
@@ -87,7 +88,8 @@ def _meter_dial(name,x,y,z,radius,labels,units):
         points.extend((p.x+sign*width.x*w,p.y+sign*width.y*w,tz) for sign in (-1,1))
     mesh(name,"carLens","Tapered vermilion gauge needle",points,
          [(2*i,2*i+1,2*i+3,2*i+2) for i in range(3)],rgb(0xf45429),soft=False)
-    _pill(name,"plain","Recessed black pointer hub",(x,y,z-.007),.025,.025,.0085,rgb(0x252923),"z",1)
+    _pill(name,"plain","Black pointer hub seated on the dial",(x,y,z-.0063),
+          .020,.020,.0103,rgb(0x292c26),"z",1)
     for side in (-1,1):
         at=(x+side*radius*.353,y+.0004,z-.0035)
         _pill(name,"carMetal","Tiny gauge face screw",at,.0049,.0049,.0016,rgb(0x5e6459),"z",1)
@@ -417,6 +419,9 @@ def _center_stack(name):
                       (.111,-.229),(-.111,-.229)],4)
     def center(u,v,d):
         return _dash_face(u,.750+v,d)
+    _bezel(name,"carLeather","Molded dash surround joined to walnut stack",
+           outline,center,[(1.067,-.058),(1.044,-.010),(1.028,.009),(1.006,.016),(.984,.013)],
+           rgb(0x827e6f))
     _bezel(name,"carWood","Glossy curved walnut center bezel",outline,center,
            [(1,-.023),(1,.010),(.992,.019),(.965,.025)],SEDAN_WALNUT)
     vent=_stack_vent_outline()
@@ -440,13 +445,16 @@ def _center_stack(name):
     _climate_controls(name)
     _radio(name)
     _pill(name,"plain","Recess behind ash tray",(0,.546,.621),.192,.072,.016,SEDAN_BLACK,"z",.49)
-    cap=_dash_face(-.096,.588,.032)
+    cap=(-.096,.598,.608)
     lathe(name,"carMetal","Polished lighter socket ring",
           [(.012,.021,.021),(.004,.025,.025),(-.005,.024,.024),(-.009,.018,.018)],
           SEDAN_ALLOY,32,cap,"z",caps=False)
     box(name,"plain","Glovebox liner rear wall",(-.474,.672,1.002),(.520,.173,.027),rgb(0x383731),.010)
     for side in (-1,1):
-        box(name,"carLeather","Fixed glovebox cavity jamb",(-.474+side*.251,.669,.913),
+        x=-.474+side*.251
+        box(name,"carLeather","Fixed glovebox cavity jamb",(x,.669,.913),
             (.027,.162,.179),rgb(0x59574d),.009)
-    for x in (-.679,.679):
-        _vent(name,x,.861,.086,.120,True)
+        _pill(name,"carLeather","Fixed glovebox hinge pin housing",(x,.592,.842),
+              .039,.039,.035,rgb(0x6b6353),"x",.81)
+        lathe(name,"carMetal","Glovebox captive hinge pin",[(0,.007,.007),(.032,.007,.007)],
+              rgb(0x62605a),12,(x-.016,.589,.841),"x")

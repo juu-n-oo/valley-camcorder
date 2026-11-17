@@ -248,7 +248,7 @@
       box(car,cabin,[0,.407,-.878],[1.38,.270,.485],{kind:"rock",follow:false});
       const dash=part(car,"carCabin",asset("dash",model(m,"dashboard")));
       box(car,dash,[0,.793,.889],[1.49,.325,.29],{follow:false});
-      part(car,"carTrim",asset("rearview shell",model(m,"rearview_housing")),{center:[0,1.201,.405]});
+      part(car,"carTrim",asset("rearview shell",model(m,"rearview_housing")),{center:[0,1.243,.348]});
       part(car,"glass",asset("rearview glass",model(m,"rearview_glass"),{ray:[m.carMetal]}),
         {hp:.23,opaqueGlass:true,center:[0,1.201,.374]});
       part(car,"carTrim",asset("engine and trunk",model(m,"engine_and_boot"),{ray:[m.carMetal]}));
