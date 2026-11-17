@@ -51,31 +51,51 @@ def _lcd_numbers(name,text,at,width,height,color):
             mesh(name,"gloss","LCD segment",points,[tuple(range(6))],color,soft=False)
 
 
-def _meter_dial(name,x,y,z,radius,labels,units):
-    trim=rgb(0x242825)
-    dial=_pill(name,"plain","Recessed instrument dial",(x,y,z),
-               2.062*radius,2.062*radius,.0042,trim,"z",1)
+def _meter_dial(name,x,y,z,radius,labels,units,windows=()):
+    trim=rgb(0x232622)
+    outline=_elliptic(2.047*radius,2.047*radius,1,96)
+    cutouts=[_offset_outline(_elliptic(width,.011,.51,28),(0,v)) for _,_,v,width in windows]
+    dial=_perforated_surface(name,"plain","Matte instrument dial with recessed windows",
+                             outline,cutouts,[(0,0)],lambda u,v:(x+u,y+v,z-.0024),trim,flip=True)
     dial["finish_override"]="Matte meter face"
-    lathe(name,"plain","Rounded black gauge rim rolled into the dial face",
-          [(.001,radius*1.031,radius*1.031),(-.0023,radius*1.024,radius*1.024),
-           (-.0038,radius*1.002,radius*1.002),(-.0020,radius*.987,radius*.987)],
-          rgb(0x30342e),72,(x,y,z),"z",caps=False)
+    lathe(name,"plain","Dark rounded rim rolled into the gauge face",
+          [(.002,radius*1.041,radius*1.041),(-.0029,radius*1.027,radius*1.027),
+           (-.0034,radius*1.009,radius*1.009),(-.0024,radius*.994,radius*.994)],
+          rgb(0x1c201c),88,(x,y,z),"z",caps=False)
+    for (kind,text,v,width),opening in zip(windows,cutouts):
+        cy=y+v
+        lip=_elliptic(width+.0034,.0136,.51,28)
+        lower=[(u*.958,(w-v)*.87+v) for u,w in opening]
+        rows_mesh(name,"plain",kind+" recessed frame",
+                  [[(x+u,y+w,d) for u,w in rim] for rim,d in
+                   ((_offset_outline(lip,(0,v)),z-.0028),(opening,z-.0028),(lower,z+.0029))],
+                  rgb(0x141814),caps=False)
+        box(name,"plain",kind+" backing", (x,cy,z+.0044),(width-.001,.010,.002),rgb(0x10120f),.00038)
+        step=(width-.0035)/len(text)
+        for i,digit in enumerate(text):
+            dx=x+((len(text)-1)/2-i)*step
+            last=kind=="Trip meter" and i==len(text)-1
+            color=rgb(0x888573 if last else 0x272b24)
+            _pill(name,"gloss",kind+" curved number drum",(dx,cy,z+.0019),
+                  step-.00072,.0087,.0028,color,"z",.38)
+            _letter(name,"gloss",digit,(dx,cy-.0032,z+.00033),.0082,
+                    rgb(0x272b23 if last else 0xc4c7ba),right=(-1,0,0),width=.90,rise=.00006)
     # The first and last tick are down to either side of the center caps.
     def polar(t,r,depth=.0032):
         a=3.78-4.40*t
         return (x-r*cos(a),y+r*sin(a),z-depth)
-    period=5 if units=="x1000rpm" else 4
+    period=5 if units.startswith("x1000") else 4
     intervals=(len(labels)-1)*period
     for i in range(intervals+1):
         t=i/intervals
         major=i%period==0
-        color=rgb(0xb84f3e) if units=="x1000rpm" and t>.819 else rgb(0xb7bfb0)
+        color=rgb(0xb84f3e) if units.startswith("x1000") and t>.819 else rgb(0xb7bfb0)
         _cord(name,"gloss","Long gauge scale tick" if major else "Fine gauge graduation",
               [polar(t,radius*(.847 if major else .89)),polar(t,radius*.955)],
               .00087 if major else .00058,color,sides=4)
     for i,label in enumerate(labels):
         px,py,pz=polar(i/(len(labels)-1),radius*.734)
-        _letter(name,"gloss",label,(px,py-.0042,pz-.0005),.0110,rgb(0xc0c6b9),
+        _letter(name,"gloss",label,(px,py-(.0062 if i==0 else .0042),pz-.0005),.0110,rgb(0xc6cabb),
                 right=(-1,0,0),width=.92,rise=.00008)
     _letter(name,"gloss",units,(x,y-radius*.535,z-.0037),.0096,rgb(0xc6cbbd),
             right=(-1,0,0),width=1.01,rise=.00008)
@@ -83,7 +103,7 @@ def _meter_dial(name,x,y,z,radius,labels,units):
     direction=Vector((tx-x,ty-y)).normalized()
     width=Vector((-direction.y,direction.x))
     points=[]
-    for pos,w in ((-.012,.0024),(.006,.00235),(radius*.902,.00120),(radius*.932,.00055)):
+    for pos,w in ((-.003,.0024),(.006,.00235),(radius*.902,.00120),(radius*.932,.00055)):
         p=Vector((x,y))+direction*pos
         points.extend((p.x+sign*width.x*w,p.y+sign*width.y*w,tz) for sign in (-1,1))
     mesh(name,"carLens","Tapered vermilion gauge needle",points,
@@ -136,36 +156,37 @@ def _cluster(name):
                       (.262,-.043),(.247,-.081),(.197,-.094),(-.193,-.094)],4)
 
     def surround(x,y,d):
-        return _add(center,(x,y,d+.043*(x/.255)**2))
+        crown=.013*smooth(.032,.083,y)*(1-(x/.29)**2)
+        return _add(center,(x,y+crown,d+.037*(x/.262)**2))
 
-    _bezel(name,"carLeather","Molded meter visor over the meter mask",outline,surround,
-           [(1.060,.018),(1.057,-.019),(1.026,-.058),(.987,-.069),(.951,-.065)],SEDAN_TRIM)
-    _bezel(name,"carWood","Thin burl instrument surround",outline,surround,
-           [(1.001,-.059),(1,-.069),(.966,-.075),(.943,-.068)],SEDAN_WALNUT)
+    _bezel(name,"carLeather","Padded cluster brow blended into the dash top",outline,surround,
+           [(1.104,.089),(1.112,.044),(1.100,-.003),(1.070,-.058),
+            (1.037,-.085),(1.015,-.094),(.998,-.093)],SEDAN_TRIM)
+    _bezel(name,"carWood","Thin rolled burl trim at the instrument opening",outline,surround,
+           [(1.003,-.094),(1,-.095),(.980,-.097),(.974,-.091)],SEDAN_WALNUT)
+    lining=_bezel(name,"plain","Deep matte inner wall of the gauge hood",outline,surround,
+                   [(.975,-.092),(.972,-.080),(.965,-.063),(.944,-.039),(.931,-.026)],
+                   rgb(0x151915))
+    lining["finish_override"]="Matte meter face"
+
     def meter_mask(x,y,d):
-        return center[0]+x,center[1]+y,.614+.010*(x/.269)**2+d
+        return center[0]+x,center[1]+y,.614+.012*(x/.269)**2+d
     mask=_bezel(name,"plain","Full-width matte backing mask behind the four dials",outline,meter_mask,
-                [(.959,.012),(.950,.003),(.941,0)],rgb(0x171b18),True)
+                 [(.996,.015),(.987,.004),(.971,0)],rgb(0x181b17),True)
     mask["finish_override"]="Matte meter face"
-    _meter_dial(name,.545,.923,.607,.0795,[str(n) for n in range(9)],"x1000rpm")
-    _meter_dial(name,.352,.922,.606,.0800,[str(n) for n in range(0,221,20)],"km/h")
+    _meter_dial(name,.545,.923,.607,.0795,[str(n) for n in range(9)],"x1000 rpm")
+    windows=(("Odometer","148432",.023,.047),("Trip meter","0671",-.024,.046))
+    _meter_dial(name,.352,.922,.606,.0800,[str(n) for n in range(0,221,20)],"km/h",windows)
     _small_dial(name,1,(.666,.884,.617))
     _small_dial(name,-1,(.233,.885,.617))
 
     def panel(x,y,d):
         return x,y,.606-d
 
-    for kind,text,x,y in (("Odometer","148432",.351,.943),("Trip meter","067.1",.351,.899)):
-        _pill(name,"plain",kind+" window",panel(x,y,.0022),.048,.010,.003,rgb(0x101411),"z",.49)
-        for i,digit in enumerate(text):
-            dx=x+(2.5-i)*.0071 if kind=="Odometer" else x+(2-i)*.0070
-            box(name,"gloss",kind+" individual digit wheel",panel(dx,y,.0039),(.0065,.0079,.0011),
-                rgb(0x626154 if digit=="1" and kind=="Trip meter" else 0x262920),.00045)
-            _panel_print(name,digit,dx,y-.0025,.0084,panel,.0047,rgb(0xc6c8ba),width=.90)
     for i,letter in enumerate("PRND32L"):
         y=.972-i*.0154
         outline=_elliptic(.014,.010,.45,24)
-        col=rgb(0x54d0a4) if i==0 else rgb(0x333a34)
+        col=rgb(0x49cd9d) if i==0 else rgb(0x292e28)
         _bezel(name,"gloss","Park indicator bezel" if i==0 else "Gear indicator bezel",outline,
                lambda u,v,d:panel(.449+u,y+v,d),[(1,.0036),(.95,.0042),(.79,.0042)],col)
         _panel_print(name,letter,.449,y-.0030,.0093,panel,.0046,col if i==0 else DASH_MARK,width=.90)
@@ -197,9 +218,12 @@ def _cluster(name):
               .00048,_RED_LAMP,sides=4)
     _cord(name,"gloss","Battery plus",[battery(-.0037,-.0013),battery(-.0037,.0013)],
           .00047,_RED_LAMP,sides=4)
-    stem=(.288,.853,.590)
-    lathe(name,"plain","Knurled trip-reset stem",[(-.009,.0032,.0032),(-.006,.004,.004),(.016,.0024,.0024)],
-          rgb(0x303632),16,stem,"z")
+    stem=(.283,.849,.597)
+    lathe(name,"plain","Round seat of the trip-reset button",
+          [(0,.009,.009),(-.004,.009,.009),(-.008,.006,.006)],rgb(0x161a17),24,stem,"z")
+    lathe(name,"plain","Knurled trip-reset stalk and cap",
+          [(0,.0029,.0029),(-.016,.0029,.0029),(-.018,.006,.006),(-.023,.0061,.0061),
+           (-.025,.0044,.0044)],rgb(0x2d312c),24,_add(stem,(0,0,-.006)),"z")
 
 
 def _switch(name,label,x,y,width,height,*,depth=.030,text=None,size=.0069,shape=.42):

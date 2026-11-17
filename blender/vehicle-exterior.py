@@ -646,11 +646,27 @@ def _lids():
             _cord(name,"carPaint","Stamped reinforcement rib",
                   [skin(.5+side*blend(.109,.383,t),blend(.09,.94,t),.033) for t in _range(20)],
                   .013,rgb(0x8f9192))
-            hinge_z=SEDAN_HOOD[2]+.008 if front else SEDAN_TRUNK[2]+.015
-            _cord(name,"carMetal","Hinge arm",catmull([(side*.487,.822,hinge_z),
-                   (side*.487,.862 if front else .836,hinge_z+(.105 if front else -.13)),
-                   (side*.469,.901 if front else .851,hinge_z+(.260 if front else -.29))]),
-                   .013,rgb(0x666c69))
+            if front:
+                hinge_z=SEDAN_HOOD[2]+.008
+                _cord(name,"carMetal","Hood hinge arm",catmull([(side*.487,.822,hinge_z),
+                       (side*.487,.862,hinge_z+.105),(side*.469,.901,hinge_z+.260)]),
+                       .013,rgb(0x666c69))
+            else:
+                x=side*.584
+                path=[(x,.968,-1.850),(x,.907,-1.859),(x,.870,-1.917),
+                      (side*.578,.881,-2.000),(side*.561,.911,-2.107)]
+                tube(name,"carPaint","Pressed curved trunk hinge strap",
+                     [(p,.015,.007) for p in path],rgb(0x797a75),sides=18,density=5)
+                box(name,"carMetal","Stamped hinge landing beneath trunk lid",
+                    (side*.560,.922,-2.104),(.056,.027,.081),rgb(0x555c58),.007)
+                for dz in (-.022,.022):
+                    lathe(name,"carMetal","Bolt through trunk hinge landing",
+                          [(0,.009,.009),(-.008,.008,.008)],rgb(0x606762),6,
+                          (side*.560,.910,-2.104+dz))
+                if side>0:
+                    loom=[_add(point,(.020,-.012,.011)) for point in path]
+                    _cord(name,"plain","Fabric-wrapped trunk lid wiring loom",catmull(loom,5),
+                          .0048,rgb(0x343738),sides=10)
         if front:
             _bezel(name,"carMetal","Bonnet latch staple",_elliptic(.074,.032,.55,20),
                    lambda x,y,t:_add(_deck(True,.5,.91),(x,y-.049,t)),
@@ -1031,11 +1047,19 @@ def _end_glass_point(front,u,v):
             z+(1 if front else -1)*(bow-corner))
 
 
+def _c_pillar_point(side,u,v):
+    glass_edge=1 if side>0 else 0
+    outer=_end_glass_point(False,glass_edge,v)
+    inner=_side_glass_point(side,False,0,v)
+    crown=sin(pi*u)*sin(pi*v)**1.09
+    return _add(_lerp(outer,inner,u),(side*.019*crown,.005*crown,0))
+
+
 def _green_glass(front):
     def tint(p):
-        color=rgb(0x475e5b) if front else rgb(0x3c4b4b)
+        color=rgb(0x555e5d) if front else rgb(0x3c4b4b)
         if front:
-            return _lerp(color,rgb(0x344f61),.76*smooth(1.297,1.397,p[1]))
+            return _lerp(color,rgb(0x335581),smooth(1.269,1.348,p[1]))
         return color
     return tint
 
@@ -1065,9 +1089,11 @@ def _glazing_pane(front):
     glass=_sedan_asset("windshield" if front else "back_glass")
     def pane(u,v):
         return _end_glass_point(front,u,v)
-    _panel(glass,"carGlass","Compound curved laminated glass" if front else "Heated rear window",
-           32,24 if front else 38,pane,_green_glass(front),True)
-    if not front:
+    window=_panel(glass,"carGlass","Compound curved laminated glass" if front else "Heated rear window",
+                  32,32 if front else 38,pane,_green_glass(front),True)
+    if front:
+        window["finish_override"]="Laminated windscreen"
+    else:
         _rear_glass_heater(glass,pane)
 
 
@@ -1126,10 +1152,7 @@ def _roof_and_glazing():
             inner = (side*(x-.006),y-.023,z)
             return _add(_lerp(outer,inner,u),(side*.006*sin(pi*u),.005*sin(pi*u),0))
         def c_pillar(u,v):
-            outer = _end_glass_point(False,edge,v)
-            inner = _side_glass_point(side,False,0,v)
-            crown=sin(pi*u)*sin(pi*v)**1.09
-            return _add(_lerp(outer,inner,u),(side*.019*crown,.005*crown,0))
+            return _c_pillar_point(side,u,v)
         _panel(roof,"carPaint","A pillar" if side<0 else "Driver A pillar",9,24,
                a_pillar,SEDAN_PAINT,flip=side>0)
         _panel(roof,"carPaint","Quarter panel between rear glass and door",18,33,

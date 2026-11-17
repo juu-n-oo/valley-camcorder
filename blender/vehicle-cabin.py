@@ -244,13 +244,13 @@ def _stitch(name,label,sample,normal,color=rgb(0xb6a68a)):
     """Short stitches sit on the same molded surface as the leather."""
     points=[Vector(sample(t)) for t in _range(45)]
     length=sum((b-a).length for a,b in zip(points,points[1:]))
-    count=max(1,round(length/.0051))
+    count=max(1,round(length/.00365))
     vertices,faces=[],[]
     normal=Vector(normal)
     for i in range(count):
-        a=Vector(sample((i+.09)/count))+normal*.00062
-        b=Vector(sample((i+.70)/count))+normal*.00062
-        across=(b-a).cross(normal).normalized()*.00042
+        a=Vector(sample((i+.15)/count))+normal*.00048
+        b=Vector(sample((i+.73)/count))+normal*.00048
+        across=(b-a).cross(normal).normalized()*.00023
         start=len(vertices)
         vertices.extend((a-across,a+across,b+across,b-across))
         faces.append((start,start+1,start+2,start+3))
@@ -261,17 +261,19 @@ def _seat_skin(name,label,sample,back,sections,normal):
     """The center strip and bolsters share all of their seam positions."""
     for i,(left,right,perforated) in enumerate(sections):
         uv=(lambda p:(16+p[0],p[2 if normal[1]>0 else 1])) if perforated else None
+        columns=max(5,round(50*(right-left)))
         obj=_panel(name,"carLeather",label+(" perforated insert" if perforated else " smooth bolster"),
-                   17 if perforated else 11,33,lambda u,v:sample(blend(left,right,u),v),
+                   columns,33,lambda u,v:sample(blend(left,right,u),v),
                    rgb(0xc7b99e) if perforated else rgb(0xcec1a6),flip=normal[1]>0,uv=uv)
         if perforated:
             obj["finish_override"]="Perforated cushion" if normal[1]>0 else "Perforated backrest"
         if i:
-            _cord(name,"carLeather","Tan leather welt in panel join",
-                  [_add(sample(left,t),_scale(normal,.00032)) for t in _range(35)],
-                  .00075,rgb(0xada186),sides=5)
-            for inset in (-.009,.009):
-                _stitch(name,"Two sewn rows along seat panel",lambda t:sample(left+inset,t),normal)
+            edge_join=perforated!=sections[i-1][2]
+            _cord(name,"carLeather","Recessed join between sewn leather panels",
+                  [sample(left,t) for t in _range(43)],
+                  .00054 if edge_join else .00029,rgb(0xb6a88f),sides=5)
+            for inset in ((-.006,.006) if edge_join else (.003,)):
+                _stitch(name,"Fine stitches along seat panel",lambda t:sample(left+inset,t),normal)
     edge=_panel_border(32,34)
     def round_edge(u,v,t):
         front=Vector(sample(u,v))
@@ -288,24 +290,29 @@ def _seat_skin(name,label,sample,back,sections,normal):
 
 def _upholstery():
     name=_sedan_asset("upholstery")
-    sections=((0,.183,False),(.183,.817,True),(.817,1,False))
+    cushion_sections=((0,.159,False),(.159,.337,True),(.337,.501,True),(.501,.673,True),
+                      (.673,.842,True),(.842,1,False))
+    back_sections=((0,.165,False),(.165,.350,True),(.350,.650,True),(.650,.835,True),(.835,1,False))
 
     def cushion(label,center,width,depth,wide=False):
         cx,cz=center
         def top(u,v):
             x=2*u-1
-            span=width*.5*(.85+.15*sin(pi*v)**.56)
-            crown=.025*(1-x*x)+.018*sin(pi*v)
-            rise=.026*exp(-((abs(x)-.76)/.167)**2)*sin(pi*v)**.58
-            nose=.039*x*x*smooth(.56,1,v)
-            return cx+span*x,.447+crown+rise+.018*v-.019*v**10,cz+depth*(v-.5)-nose
+            span=width*.5*(.806+.194*sin(pi*v)**.56)
+            crown=.020*(1-x*x)+.018*sin(pi*v)
+            bolster=.030*exp(-((abs(x)-.777)/.157)**2)*sin(pi*v)**.68
+            nose=.066*abs(x)**2.6*smooth(.53,1,v)
+            seat_dip=.006*exp(-((abs(x)-.47)/.24)**2)*sin(pi*v)**2 if wide else 0
+            return cx+span*x,.446+crown+bolster+.016*v-.028*v**9-seat_dip,cz+depth*(v-.5)-nose
         def base(u,v):
             x,y,z=top(u,v)
             return blend(cx,x,.925),.369+.015*(1-v),blend(cz,z,.949)
-        cuts=((0,.095,False),(.095,.354,True),(.354,.646,False),(.646,.905,True),(.905,1,False)) if wide else sections
+        cuts=((0,.085,False),(.085,.225,True),(.225,.357,True),(.357,.643,False),
+              (.643,.775,True),(.775,.915,True),(.915,1,False)) if wide else cushion_sections
         _seat_skin(name,label,top,base,cuts,(0,1,0))
-        for v in (.875,.889):
-            _stitch(name,label+" seam across curved forward edge",lambda t:top(t,v),(0,1,0))
+        for offset in (0,.014):
+            _stitch(name,label+" double seam following the rolled nose",
+                    lambda t:top(t,.911+offset-.039*(2*t-1)**2),(0,1,0))
 
     for side in (-1,1):
         x=side*.427
@@ -313,9 +320,9 @@ def _upholstery():
 
         def front(u,v):
             dx=2*u-1
-            width=.267*(.95+.05*sin(pi*v)-.17*v**4)
-            y=.453+.472*v-.063*dx*dx*smooth(.70,1,v)
-            bolster=.046*exp(-((abs(dx)-.75)/.179)**2)*sin(pi*v)**.62
+            width=.273*(.845+.155*smooth(.06,.36,v)-.172*smooth(.73,1,v))
+            y=.453+.475*v-.074*dx*dx*smooth(.63,1,v)
+            bolster=.043*exp(-((abs(dx)-.758)/.180)**2)*sin(pi*v)**.76
             lumbar=.024*exp(-((v-.335)/.253)**2)*(1-dx*dx)
             z=-.086-.158*v+lumbar+bolster-.011*v**14
             return x+width*dx,y,z
@@ -324,28 +331,29 @@ def _upholstery():
             px,py,pz=front(u,v)
             return blend(x,px,.956),py-.003,pz-(.096+.033*sin(pi*v))
 
-        _seat_skin(name,"Contoured front backrest",front,reverse,sections,(0,0,1))
+        _seat_skin(name,"Contoured front backrest",front,reverse,back_sections,(0,0,1))
         for v in (.767,.780):
             _stitch(name,"Horizontal seam over the backrest insert",
-                    lambda t:front(blend(.183,.817,t),v),(0,0,1))
+                    lambda t:front(blend(.165,.835,t),v-.017*(2*t-1)**2),(0,0,1))
 
-        head=_outline([(-.113,-.066),(-.130,-.039),(-.133,.030),(-.107,.075),(-.067,.087),
-                       (.062,.088),(.108,.072),(.131,.035),(.130,-.029),(.111,-.063),
-                       (.064,-.073),(-.069,-.073)],4)
+        head=_outline([(-.081,-.081),(-.106,-.065),(-.119,-.028),(-.116,.036),
+                       (-.095,.080),(-.061,.105),(-.013,.114),(.042,.109),
+                       (.087,.085),(.113,.046),(.123,-.006),(.111,-.052),
+                       (.084,-.079),(.031,-.086),(-.037,-.084)],4)
         def headrest(u,v,d):
-            gather=.004*cos(u*214)*exp(-((v+.065)/.012)**2)
-            return x+u,1.032+v,-.270+d-.23*v+gather
-        _bezel(name,"carLeather","Wrapped tapered front headrest",head,headrest,
-               [(.67,-.088),(.83,-.084),(.953,-.070),(1,-.046),(1,.032),
-                (.966,.054),(.914,.068),(.73,.074)],rgb(0xc9bba1),True)
-        for offset in (-.0031,.0031):
-            seam=[headrest(u*.988,v*.989,offset-.034) for u,v in head]
-            _cord(name,"carLeather","Headrest sewn perimeter",seam,.00085,rgb(0xb1a388),
-                  sides=4,closed=True)
-        for dx in (-.079,.079):
-            _cord(name,"carMetal","Steel headrest post",[(x+dx,.903,-.286),(x+dx,.987,-.276)],
-                  .0074,SEDAN_ALLOY,sides=10)
-            _pill(name,"carLeather","Headrest post collar",(x+dx,.916,-.285),.023,.025,.007,CABIN_BEIGE,"y")
+            gather=.0038*cos(u*264)*exp(-((v+.076)/.010)**2)
+            return x+u,1.010+v,-.276+d-.20*v+gather
+        _bezel(name,"carLeather","Rounded front headrest with gathered lower cover",head,headrest,
+               [(.59,-.090),(.76,-.085),(.910,-.069),(.985,-.043),(1,-.009),
+                (.982,.025),(.930,.051),(.824,.068),(.604,.076)],rgb(0xc9bba1),True)
+        for offset in (-.0022,.0022):
+            seam=[headrest(u*.982,v*.981,.022+offset) for u,v in head]
+            _cord(name,"carLeather","Fine double seam around front headrest",seam,.00040,
+                  rgb(0xb5a78f),sides=5,closed=True)
+        for dx in (-.073,.073):
+            _cord(name,"carMetal","Steel headrest post",[(x+dx,.904,-.286),(x+dx,.957,-.277)],
+                  .0062,SEDAN_ALLOY,sides=10)
+            _pill(name,"carLeather","Headrest post collar", (x+dx,.920,-.286),.023,.024,.006,CABIN_BEIGE,"y")
 
         def pocket(u,v):
             p=reverse(blend(.153,.847,u),blend(.156,.534,v))
@@ -373,23 +381,29 @@ def _upholstery():
                [(1,-.019),(1,.016),(.961,.022)],rgb(0xb7ad94),True)
         if side>0:
             for z in (.136,.306):
-                outline=[((.031+.005*cos(a*5))*cos(a),(.031+.005*cos(a*5))*sin(a))
-                         for a in (tau*k/60 for k in range(60))]
+                outline=[((.0295+.0043*cos(a*5))*cos(a),(.0295+.0043*cos(a*5))*sin(a))
+                         for a in (tau*k/75 for k in range(75))]
                 def adjust(u,v,d):
                     return x+side*(.257+d),.348+v,z+u
-                _bezel(name,"carLeather","Five-lobe driver's seat adjustment wheel",outline,adjust,
-                       [(.87,-.006),(1,.001),(1,.015),(.913,.021),(.736,.026)],rgb(0xc3b89e),True)
-                lathe(name,"carLeather","Rounded adjustment center with recess",
-                      [(0,.013,.013),(.003,.013,.013),(.003,.006,.006),(.001,.005,.005)],
-                      rgb(0xafa58d),22,adjust(0,0,.026),"x",caps=False)
-                for i in range(5):
-                    angle=(i+.5)*tau/5
-                    for shift in (-.090,-.030,.030,.090):
-                        u,v=.031*cos(angle+shift),.031*sin(angle+shift)
-                        _cord(name,"carLeather","Flute on adjustment wheel",[adjust(u,v,d) for d in (.007,.017)],
-                              .00061,rgb(0xa99f88),sides=4)
-            _pill(name,"carLeather","Driver seat recline release",
-                  (x+side*.271,.353,-.047),.118,.041,.027,rgb(0xc4bba2),"x",.43)
+                _bezel(name,"carLeather","Shallow five-lobe driver seat adjustment wheel",outline,adjust,
+                       [(.87,-.006),(1,.001),(1,.013),(.930,.020),(.786,.024)],
+                       rgb(0xc3b89e))
+                rim=[(.786*u,.786*v) for u,v in outline]
+                hole=_elliptic(.010,.010,1,30)
+                _perforated_surface(name,"carLeather","Adjustment wheel face with center recess",
+                                     rim,[hole],[],lambda u,v:adjust(u,v,.024),rgb(0xc2b79f),flip=True)
+                lathe(name,"carLeather","Stepped wall in driver adjuster center",
+                      [(.001,.0051,.0051),(-.002,.0046,.0046),(-.004,.0039,.0039)],
+                      rgb(0xaca18a),28,adjust(0,0,.024),"x",caps=False)
+                _pill(name,"plain","Dark adjuster recess backing",adjust(0,0,.019),
+                      .008,.008,.003,rgb(0x85816e),"x",1)
+            recess=_elliptic(.117,.039,.45,30)
+            def lever(u,v,d):
+                return x+side*(.257+d),.354+v+.082*u,-.053+u
+            _bezel(name,"plain","Recessed seat recline lever socket",recess,lever,
+                   [(1,-.004),(1,.007),(.94,.008)],rgb(0x696556),True)
+            _bezel(name,"carLeather","Broad molded driver recline lever",recess,lever,
+                   [(.934,.006),(.933,.020),(.890,.027),(.829,.029)],rgb(0xc3b9a0),True)
         else:
             _pill(name,"carLeather","Passenger recline pivot at seat base",(x+side*.256,.384,-.068),
                   .041,.038,.021,rgb(0xa59d8a),"x",.84)
@@ -431,9 +445,9 @@ def _upholstery():
     def rear(u,v):
         t=2*u-1
         x=.709*t*(1-.025*v*v)
-        headrest=.102*exp(-((abs(x)-.489)/.168)**2)*v**4
-        y=.460+.429*v+headrest-.024*t*t
-        z=-1.067-.162*v+.022*sin(pi*v)+.025*exp(-((abs(t)-.88)/.140)**2)
+        headrest=.086*exp(-((abs(x)-.472)/.137)**4)*v**5
+        y=.461+.449*v+headrest-.028*t*t
+        z=-1.072-.151*v+.031*sin(pi*v)+.037*exp(-((abs(t)-.88)/.141)**2)
         return x,y,z
 
     def rear_reverse(u,v):
@@ -441,12 +455,20 @@ def _upholstery():
         return .991*x,y-.015,z-.101
 
     _seat_skin(name,"Rear backrest with integrated head restraints",rear,rear_reverse,
-               ((0,.093,False),(.093,.35,True),(.35,.65,False),(.65,.907,True),(.907,1,False)),
+               ((0,.099,False),(.099,.227,True),(.227,.350,True),(.350,.650,False),
+                 (.650,.773,True),(.773,.901,True),(.901,1,False)),
                (0,0,1))
     for side in (-1,1):
-        anchor=(side*.711,1.010,-1.316)
+        def quarter_trim(u,v):
+            return _add(_c_pillar_point(side,u,v),(-side*.014,-.010,.004))
+
+        _panel(name,"carLeather","Molded rear quarter pillar liner",18,28,quarter_trim,
+               rgb(0x8d8572),flip=side<0)
+        anchor=_add(quarter_trim(.57,.225),(-side*.008,0,0))
         _pill(name,"carLeather","Rear shoulder belt guide on pillar",anchor,
-              .059,.044,.025,rgb(0xaaa18f),"z",.53)
+              .050,.051,.025,rgb(0xa39885),"x",.53)
+        _pill(name,"plain","Dark lower slot in the shoulder belt guide",
+              _add(anchor,(-side*.012,-.009,0)),.034,.010,.0035,rgb(0x444136),"x",.45)
 
         def belt_edge(t,edge=0):
             x=side*blend(.658,.376,t)+edge*.018
@@ -458,7 +480,7 @@ def _upholstery():
         for t in _range(11):
             row=[]
             for edge in (-1,1):
-                top=_add(anchor,(edge*.018,-.006*side*edge,.012))
+                top=_add(anchor,(-side*.013+edge*.002,-.009,edge*.016))
                 end=belt_edge(0,edge)
                 p=tuple(blend(a,b,t) for a,b in zip(top,end))
                 row.append(_add(p,(0,0,.013*sin(pi*t))))
@@ -477,13 +499,27 @@ def _upholstery():
         return u,.536+d-.035*v,-.839+v
     _bezel(name,"carLeather","Folded down rear leather armrest",arm,rest,
            [(.887,-.053),(1,-.030),(1,.034),(.943,.052)],rgb(0xc6b89c),True)
+    for inset in (.900,.928):
+        _cord(name,"gloss","Twin armrest cover stitch at the folded edge",
+              [rest(u*inset,v*inset,.0525) for u,v in arm],
+              .00043,rgb(0xb8ab92),sides=5,closed=True)
     _cord(name,"carLeather","Raised armrest binding",[rest(x*.938,z*.938,.052) for x,z in arm],
           .00125,rgb(0xaf9f84),sides=5,closed=True)
-    _pill(name,"fabric","Shaped rear parcel shelf",(0,.942,-1.479),1.518,.421,.033,
-          rgb(0x45443f),"y",.46)
+    def parcel_shelf(u,v):
+        x,y,z=rear_reverse(u,1)
+        leading=(x,y+.010,z+.018)
+        trailing=_add(_end_glass_point(False,u,.031),(0,-.024,.009))
+        return _add(_lerp(leading,trailing,v),(0,-.008*sin(pi*v),0))
+
+    _panel(name,"fabric","Parcel shelf seated against backrest and rear window",
+           46,14,parcel_shelf,rgb(0x514b3e),flip=True)
+    speaker=_elliptic(.144,.501,.61,32)
     for side in (-1,1):
-        _pill(name,"plain","Rear shelf speaker",(side*.508,.961,-1.462),.217,.130,.008,
-              rgb(0x353733),"y",.59)
+        def speaker_grille(u,v,d):
+            return _add(parcel_shelf(.5+side*.326+u,.502+v),(0,d,0))
+
+        _bezel(name,"plain","Rear speaker grille seated into parcel carpet",speaker,speaker_grille,
+               [(1.035,-.001),(1,.003),(.940,.005)],rgb(0x353733),True)
 
 
 def _dash_face(x,y,depth=0):

@@ -48,6 +48,19 @@ def _finish(slot,paint=None,optic=None,override=None):
     elif override=="Mirror lettering":
         principled.inputs["Roughness"].default_value=.68
         principled.inputs["Metallic"].default_value=.02
+    elif override=="Cast aluminum":
+        principled.inputs["Roughness"].default_value=.47
+        principled.inputs["Metallic"].default_value=.58
+        texture=nodes.new("ShaderNodeTexNoise")
+        coords=nodes.new("ShaderNodeTexCoord")
+        texture.inputs["Scale"].default_value=610
+        texture.inputs["Detail"].default_value=2
+        links.new(coords.outputs["Object"],texture.inputs["Vector"])
+        grain=nodes.new("ShaderNodeBump")
+        grain.inputs["Strength"].default_value=.19
+        grain.inputs["Distance"].default_value=.00021
+        links.new(texture.outputs["Fac"],grain.inputs["Height"])
+        links.new(grain.outputs["Normal"],principled.inputs["Normal"])
     elif override=="Matte meter face":
         principled.inputs["Roughness"].default_value=.70
         principled.inputs["Specular IOR Level"].default_value=.14
@@ -75,6 +88,20 @@ def _finish(slot,paint=None,optic=None,override=None):
     if slot=="carGlass" and override!="Rear demister print":
         transparent=nodes.new("ShaderNodeBsdfTransparent")
         transparent.inputs["Color"].default_value=(.48,.58,.60,1)
+        if override=="Laminated windscreen":
+            coordinate=nodes.new("ShaderNodeTexCoord")
+            vertical=nodes.new("ShaderNodeSeparateXYZ")
+            links.new(coordinate.outputs["Object"],vertical.inputs[0])
+            band=nodes.new("ShaderNodeMapRange")
+            band.interpolation_type="SMOOTHERSTEP"
+            band.inputs["From Min"].default_value=1.269
+            band.inputs["From Max"].default_value=1.348
+            links.new(vertical.outputs["Z"],band.inputs["Value"])
+            transmitted=nodes.new("ShaderNodeMixRGB")
+            transmitted.inputs[1].default_value=(.89,.93,.92,1)
+            transmitted.inputs[2].default_value=(.39,.61,.91,1)
+            links.new(band.outputs["Result"],transmitted.inputs[0])
+            links.new(transmitted.outputs[0],transparent.inputs["Color"])
         # A single sheet represents both sides of the glass. Reflect grazing
         # light on each face without treating the cabin as the glass interior.
         geometry=nodes.new("ShaderNodeNewGeometry")
@@ -97,7 +124,7 @@ def _finish(slot,paint=None,optic=None,override=None):
         reflection=nodes.new("ShaderNodeMath")
         reflection.operation="MULTIPLY_ADD"
         reflection.inputs[1].default_value=.73
-        reflection.inputs[2].default_value=.21
+        reflection.inputs[2].default_value=.13 if override=="Laminated windscreen" else .21
         links.new(grazing.outputs[0],reflection.inputs[0])
         mix=nodes.new("ShaderNodeMixShader")
         links.new(reflection.outputs[0],mix.inputs[0])
