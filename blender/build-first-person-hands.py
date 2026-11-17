@@ -170,10 +170,10 @@ def thumb_volume(collection):
     a,b,c,d = FINGERS[-1].points
     shape = (
         (a.lerp(WRIST,.48),.0140,.0133,.0123,-6),
-        (a,.0169,.0160,.0140,-10),
-        (a.lerp(b,.42)+Vector((.001,0,.0006)),.0162,.0141,.0128,-13),
-        (a.lerp(b,.73),.0139,.0121,.0110,-19),
-        (b,.0115,.0109,.0107,-24),
+        (a,.0164,.0160,.0126,-10),
+        (a.lerp(b,.42)+Vector((.001,0,.0006)),.0149,.0141,.0092,-13),
+        (a.lerp(b,.73),.0131,.0121,.0086,-19),
+        (b,.0115,.0109,.0098,-24),
         (b.lerp(c,.53),.0105,.0101,.0096,-30),
         (c,.0102,.0100,.0096,-34),
         (c.lerp(d,.38),.0105,.0106,.0082,-37),
@@ -211,9 +211,9 @@ def sculpt(collection):
         volume("Thenar", (
             (.010,.004,.005,.0107,.0072,.0070),
             (.018,.021,.007,.0150,.0123,.0120),
-            (.024,.038,.0081,.0155,.0121,.0118),
-            (.031,.053,.0070,.0132,.0098,.0093),
-            (.032,.065,.0048,.0098,.0071,.0068),
+            (.024,.038,.0081,.0155,.0121,.0099),
+            (.031,.053,.0070,.0132,.0098,.0079),
+            (.032,.065,.0048,.0098,.0071,.0061),
             (.030,.077,.0022,.0050,.0040,.0042),
         ), collection, sides=36),
         volume("Hypothenar", (
@@ -224,17 +224,18 @@ def sculpt(collection):
             (-.031,.067,.0045,.0098,.0075,.0096),
             (-.029,.077,.0007,.0068,.0049,.0077),
         ), collection,sides=32),
-        # Start the saddle inside the palm so its end cap cannot appear as a
-        # step on the back of the thumb when the skin bends.
+        # The dorsal edge tapers into the index metacarpal. Widen the saddle
+        # inward while holding its outer rim and the palm-side thickness.
         volume("Thumb-index web saddle", (
             (.025,.026,-.0023,.0040,.0038,.0043),
-            (.033,.037,-.0019,.0067,.0046,.0074),
-            (.039,.048,-.0012,.0081,.0058,.0081),
-            (.0435,.057,-.0003,.0082,.0052,.0062),
-            (.045,.065,.0005,.0074,.0043,.0048),
-            (.043,.073,.0000,.0066,.0039,.0040),
-            (.039,.080,-.0005,.0056,.0033,.0034),
-            (.033,.087,-.0010,.0040,.0028,.0029),
+            (.033,.037,-.0013,.0065,.0042,.0060),
+            (.038,.048,-.0007,.0078,.0055,.0064),
+            (.0430,.057,-.0002,.0081,.0051,.0054),
+            (.0445,.064,-.0007,.0074,.0045,.0051),
+            (.0410,.072,-.0023,.0080,.0056,.0066),
+            (.0365,.081,-.0033,.0084,.0059,.0059),
+            (.0330,.089,-.0026,.0061,.0046,.0050),
+            (.0305,.096,-.0018,.0041,.0036,.0044),
         ), collection,samples=5,sides=40),
         thumb_volume(collection),
     ]
@@ -265,7 +266,7 @@ def sculpt(collection):
         p = vertex.co
         web = gaussian(p.y-.090,.015)*.72
         thenar = gaussian(p.x-.043,.018)*gaussian(p.y-.057,.025)
-        index_root = gaussian(p.x-.034,.009)*gaussian(p.y-.091,.010)
+        index_root = gaussian(p.x-.034,.010)*gaussian(p.y-.083,.014)
         blend_junctions.add([vertex.index],max(web,thenar,index_root),"REPLACE")
     blend = palm.modifiers.new("Blend the palm pads and webbing", "SMOOTH")
     blend.vertex_group = blend_junctions.name
@@ -276,6 +277,13 @@ def sculpt(collection):
     reducer = palm.modifiers.new("Hand topology density", "DECIMATE")
     reducer.ratio = .225
     bpy.ops.object.modifier_apply(modifier=reducer.name)
+    # Ease the thumb shoulder into the palm without thinning the palmar pad.
+    for vertex in palm.data.vertices:
+        p = vertex.co
+        radial = smooth(.019,.034,p.x)*(1-smooth(.055,.069,p.x))
+        shoulder = radial*gaussian(p.y-.047,.019)
+        p.x -= .0045*shoulder*(1-smooth(.004,.018,p.z))
+        p.z += .0017*shoulder*(1-smooth(-.004,.011,p.z))
     recalculate(palm.data)
     for face in palm.data.polygons:
         face.use_smooth = True
@@ -561,12 +569,14 @@ def skin_weights(source, rig):
     web_group = source.vertex_groups.new(name="First web surface")
     for vertex in source.data.vertices:
         x,y,z = vertex.co
-        amount = gaussian(x-.037,.013)*gaussian(y-.072,.016)*(.57+.43*(1-smooth(-.003,.009,z)))
+        dorsal = gaussian(x-.044,.019)*gaussian(y-.060,.026)
+        palmar = .66*gaussian(x-.042,.015)*gaussian(y-.061,.020)
+        amount = mix(dorsal,palmar,smooth(.001,.013,z))
         if amount>.015:
             web_group.add([vertex.index],amount,"REPLACE")
     fold = source.modifiers.new("Round the compressed first web","SMOOTH")
     fold.vertex_group = web_group.name
-    fold.factor,fold.iterations = .76,27
+    fold.factor,fold.iterations = .76,34
 
 
 PALM_LINES = (
@@ -827,6 +837,16 @@ def thumb_web_shape(skin, rig, side):
     drive_fold(key, rig, "Thumb.CMC", .16, .26, release=(.86, .24))
 
 
+def little_pad_shape(skin, rig, side):
+    pad = skin.shape_key_add(name="Palmar pad compression under the little finger", from_mix=False)
+    for vertex in skin.data.vertices:
+        x,y,z = mirror(vertex.co,side)
+        amount = gaussian(x+.0245,.0045)*gaussian(y-.0865,.0065)*smooth(.006,.010,z)
+        # As the little finger bends, its pad compresses and shifts toward the palm.
+        pad.data[vertex.index].co += mirror((.0012*amount,0,-.0014*amount),side)
+    drive_fold(pad,rig,"Little.MCP",.99,.26)
+
+
 def flex_creases(skin, rig, side):
     skin.shape_key_add(name="Rest skin", from_mix=False)
     for spec in FINGERS:
@@ -849,16 +869,11 @@ def flex_creases(skin, rig, side):
                     key.data[vertex.index].co += mirror(inward, side)*(face*(shoulder-crease))
             drive_fold(key,rig,joint,.32,.92)
 
-    pad = skin.shape_key_add(name="Palmar pad compression under the little finger", from_mix=False)
-    for vertex in skin.data.vertices:
-        x,y,z = mirror(vertex.co,side)
-        amount = gaussian(x+.0245,.007)*gaussian(y-.085,.008)*smooth(.006,.010,z)
-        pad.data[vertex.index].co.z -= .00065*amount
-    drive_fold(pad,rig,"Little.MCP",.99,.26)
+    little_pad_shape(skin, rig, side)
     thumb_web_shape(skin, rig, side)
 
 
-FIST_BENDS = ((69,90,52),(75,94,59),(77,95,61),(75,96,66))
+FIST_BENDS = ((69,90,52),(75,94,59),(77,95,61),(75,95,62))
 FIST_THUMB = ((50.7,-28.1,-19.4),(25.9,52.3))
 TUCKED_THUMB = ((40,-21,-17),(53,63))
 FIST_METACARPAL_YAW = (4,1,-1.5,-6.25)
