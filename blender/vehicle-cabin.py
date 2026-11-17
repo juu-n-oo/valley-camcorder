@@ -209,18 +209,35 @@ def _headliner_details(roof):
         return x,1.314-d+.102*z,.210+z
     _bezel(roof,"gloss","Overhead lamp surround",lamp,lamp_face,[(1,0),(1,.005),(.954,.008)],
            rgb(0x8b8a7d))
-    reflector=_bezel(roof,"carLens","Prismatic overhead lamp cover",lamp,lamp_face,
-                     [(.954,.007),(.932,.010),(.881,.014)],rgb(0xc5c8bd),True)
-    reflector["optical_cover"]="Clear"
-    _bezel(roof,"gloss","Silver map light backing",lamp,lamp_face,
-           [(.905,.003),(.888,.005)],rgb(0xa9ac9e),True)
-    for x in (-.052,.052):
-        _pill(roof,"carLeather","Individual map light switch",lamp_face(x,-.017,.013),
-              .044,.027,.012,rgb(0xb1a692),"y",.46)
-        for i in range(8):
-            offset=x+(i-3.5)*.0097
-            _cord(roof,"gloss","Map light molded flutes",[lamp_face(offset,t,.0118) for t in (-.005,.027)],
-                  .00037,rgb(0xb0b7b2),sides=4)
+    rim=_offset_outline(lamp,(0,0),.951)
+    button=_elliptic(.046,.029,.39,36)
+    openings=[_offset_outline(button,(x,-.014)) for x in (-.051,.051)]
+    lens=_perforated_surface(roof,"carLens","Two-position map light lens and switch apertures",
+                            rim,openings,[(x,z) for x in (blend(-.10,.10,t) for t in _range(26))
+                                          for z in (-.033,-.026,-.015,.003,.013,.022,.034)],
+                            lambda x,z:lamp_face(x,z,.011+.003*cos(x*pi/.222)),rgb(0xc8ceca))
+    lens["optical_cover"]="Clear"
+    _bezel(roof,"carLens","Rounded edge of the clear map light cover",lamp,lamp_face,
+           [(.954,.007),(.957,.012),(.937,.014),(.903,.013)],rgb(0xa8b5af))
+    for x in (-.051,.051):
+        def pocket(u,v,d):
+            return lamp_face(x+u,-.014+v,d)
+        _bezel(roof,"gloss","Recessed black map light switch seat",button,pocket,
+               [(1,.012),(.961,.016),(.890,.014),(.844,.007)],rgb(0x69665b))
+        _bezel(roof,"carLeather","Individual map light push switch",button,pocket,
+               [(.89,.007),(.878,.014),(.848,.019),(.770,.021)],rgb(0xb4aa93),True)
+
+        def reflector(u,v,d):
+            return lamp_face(x+u,.020+v,d)
+        _bezel(roof,"carMetal","Separate stamped map light reflector",_elliptic(.070,.027,.48,32),
+               reflector,[(1,.005),(.916,.006),(.76,.003),(.59,.001)],rgb(0xb9bdb3),True)
+        for i in range(9):
+            u=x+(i-4)*.007
+            _cord(roof,"gloss","Clear molded reading-light prism",
+                  [lamp_face(u,v,.0145) for v in (.008,.020,.029)],.00032,rgb(0xd0d2c6),sides=4)
+        mark=[pocket(u,v,.0216) for u,v in ((-.003,-.001),(.002,-.001),(.003,.001),
+                                            (.001,.003),(-.002,.003),(-.003,-.001))]
+        _cord(roof,"gloss","Engraved map light symbol",mark,.00031,rgb(0x787062),sides=4)
 
 
 def _stitch(name,label,sample,normal,color=rgb(0xb6a68a)):
