@@ -166,8 +166,10 @@ def _engine_and_boot():
               (side*.685,.706,2.069)],.010,SEDAN_RUBBER)
 
     box(name,"carMetal","Transverse DOHC block",(.128,.577,1.627),(.717,.352,.572),steel,.051)
+    rocker_top=.823
     case(name,"plain","Sculpted transverse rocker cover",[(.713,.651,.439,.050,1.636),
-         (.764,.655,.428,.052,1.620),(.798,.603,.392,.053,1.616),(.823,.575,.377,.056,1.611)],black)
+         (.764,.655,.428,.052,1.620),(.798,.603,.392,.053,1.616),
+         (rocker_top,.575,.377,.056,1.611)],black)
     cover=_outline([(-.313,-.036),(-.264,-.088),(.215,-.088),(.321,-.055),(.317,.073),(-.283,.077)],3)
     _bezel(name,"carMetal","Bright 16-valve cover casting",cover,
            lambda u,v,d:(.122+u,.775+d-.16*v,1.830+v),
@@ -175,22 +177,24 @@ def _engine_and_boot():
     mark("carMetal","DOHC 16 VALVE",(.120,0,1.858),.049,rgb(0x939488),
          up=(0,0,-1),rise=.00088,width=1.07,
          project=lambda x,y,z:(x,.7894-.16*(z-1.830)+y,z))
+    oil=(.152,rocker_top-.003,1.479)
+    # The molded mark sits just ahead of the filler cap on the outer shoulder.
+    badge=(oil[0]+.012,rocker_top,oil[2]+.101)
     badge_start=len(records)
-    _badge(name,(.247,.827,1.572),.123,"y",rgb(0x83877d))
-    upright.update((piece,.247) for piece,*_ in records[badge_start:])
+    _badge(name,badge,.103,"y",rgb(0x49514d),slot="gloss")
+    upright.update((piece,badge[0]) for piece,*_ in records[badge_start:])
     for i in range(5):
         z=1.558+i*.032
         _cord(name,"plain","Valve cover ribs",[(.026,.825,z),(-.047,.826,z),(-.144,.823,z+.011)],.0043,gray)
     for x,z in ((-.134,1.686),(.310,1.676),(-.144,1.522),(.280,1.503)):
         lathe(name,"carMetal","Valve cover retaining nut",[(0,.010,.010),(.011,.009,.009)],aluminum,6,(x,.807,z))
-    oil=(.317,.824,1.479)
     lathe(name,"plain","Oil filler cap",[(0,.047,.047),(.009,.051,.051),(.021,.049,.049),(.027,.044,.044)],
           black,24,oil)
     for i in range(10):
         a=i*tau/10
-        at=(oil[0]+.048*cos(a),.841,oil[2]+.048*sin(a))
+        at=_add(oil,(.048*cos(a),.017,.048*sin(a)))
         box(name,"plain","Cross-hatched cap grips",at,(.012,.012,.010),gray,.002,-a)
-    mark("gloss","ENGINE OIL",(.318,.851,1.478),.008,rgb(0x79786a),up=(0,0,-1),rise=.00014)
+    mark("gloss","ENGINE OIL",_add(oil,(0,.0273,0)),.008,rgb(0x79786a),up=(0,0,-1),rise=.00014)
 
     heat=_outline([(-.245,-.046),(-.220,-.101),(.209,-.103),(.246,-.047),(.211,.077),(.133,.118),
                    (-.155,.120),(-.225,.047)],4)
