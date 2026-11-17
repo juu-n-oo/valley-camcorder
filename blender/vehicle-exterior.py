@@ -489,13 +489,20 @@ def _body_shell():
                [(-.018,.021,.018),(0,.021,.018),(.082,.020,.019)],rgb(0x10120f),32,
                exhaust,"z",caps=False)
     bore["finish_override"]="Sooted exhaust"
-    box(name,"plain","Pressed rear crossmember above silencer",(0,.421,-1.925),
-        (1.48,.083,.128),rgb(0x272923),.014)
-    _cord(name,"carMetal","Muffler hanger rod",[(-.459,.286,-1.919),(-.410,.298,-1.925),
-          (-.404,.326,-1.941)],.0068,rgb(0x5f594d),sides=8)
-    _pill(name,"plain","Rubber exhaust isolation hanger",(-.405,.343,-1.940),
-          .035,.052,.018,rgb(0x23241f),"z",.49)
-    _cord(name,"carMetal","Welded upper exhaust hanger",[(-.404,.364,-1.941),(-.426,.388,-1.933)],
+    section=((-.064,-.004),(-.052,-.008),(.049,-.008),(.064,-.003),
+             (.063,.004),(.050,.008),(-.051,.008),(-.064,.004))
+    crossmember=[]
+    for u in _range(23):
+        x=blend(-.740,.740,u)
+        crown=.324+.015*exp(-((x+.533)/.142)**2)
+        crossmember.append([(x,crown+dy,-1.925+dz) for dz,dy in section])
+    rows_mesh(name,"plain","Pressed rear crossmember below luggage floor",
+              crossmember,rgb(0x272923))
+    _cord(name,"carMetal","Muffler hanger rod",[(-.459,.286,-1.919),(-.426,.285,-1.929),
+          (-.404,.295,-1.941)],.0068,rgb(0x5f594d),sides=8)
+    _pill(name,"plain","Rubber exhaust isolation hanger",(-.405,.307,-1.940),
+          .035,.037,.018,rgb(0x23241f),"z",.49)
+    _cord(name,"carMetal","Welded upper exhaust hanger",[(-.404,.317,-1.941),(-.426,.335,-1.933)],
           .0068,rgb(0x5f594d),sides=8)
     box(name,"plain","Recessed underbody floor pan",(0,.216,-.12),(1.32,.066,3.54),SEDAN_BLACK,.028)
     _jamb_hardware(name)
@@ -647,10 +654,21 @@ def _lids():
                   [skin(.5+side*blend(.109,.383,t),blend(.09,.94,t),.033) for t in _range(20)],
                   .013,rgb(0x8f9192))
             if front:
-                hinge_z=SEDAN_HOOD[2]+.008
-                _cord(name,"carMetal","Hood hinge arm",catmull([(side*.487,.822,hinge_z),
-                       (side*.487,.862,hinge_z+.105),(side*.469,.901,hinge_z+.260)]),
-                       .013,rgb(0x666c69))
+                pivot=(side*.487,hinge[1],hinge[2])
+                landing=skin(.5+side*.352,.210,.025)
+                path=[pivot,(side*.485,.939,.925),(side*.469,.914,1.008),
+                      (landing[0],landing[1]-.012,landing[2]-.052),landing]
+                tube(name,"carMetal","Pressed bonnet hinge strap from pivot to inner shell",
+                     [(p,.013,.0065) for p in path],rgb(0x535a55),sides=12,density=5)
+                lathe(name,"carMetal","Moving bonnet hinge knuckle concentric with pivot",
+                      [(-.017,.013,.013),(-.012,.014,.014),(.012,.014,.014),(.017,.013,.013)],
+                      rgb(0x4b514b),24,pivot,"x")
+                box(name,"carMetal","Stamped bonnet hinge landing against inner shell",
+                    _add(landing,(0,-.005,0)),(.059,.019,.106),rgb(0x53594f),.004)
+                for dz in (-.034,.034):
+                    lathe(name,"carMetal","Bonnet hinge landing bolt",
+                          [(-.007,.0064,.0064),(0,.008,.008)],rgb(0x7b8074),10,
+                          _add(landing,(0,-.012,dz)))
             else:
                 x=side*.584
                 path=[(x,.968,-1.850),(x,.907,-1.859),(x,.870,-1.917),
@@ -1216,13 +1234,46 @@ def _cowl_wipers():
         x=blend(-.763,.763,u)
         return x,.932-.028*(abs(x)/.763)**1.7+.007*sin(pi*v),.830+.073*v+.035*(1-(x/.763)**2)
 
-    _panel(name,"plain","Cowl grille below windshield seal",46,11,cowl,rgb(0x272b29),True)
-    for side in (-1,1):
-        for i in range(19):
-            u=.5+side*(.119+.0181*i)
-            _cord(name,"gloss","Narrow molded cowl vent slot",
-                  [_add(cowl(u+t*.005,blend(.124,.750,t)),(0,.0017,0)) for t in _range(7)],
-                  .0023,rgb(0x171b19),sides=5)
+    # Reference 24 has a short transverse strip and a deeper grille on the
+    # opposite side. Each opens into the cowl through actual gaps in its slats.
+    grilles=((.180,.548,.068,.229,31,1),(.666,.814,.258,.815,15,4))
+    openings=[]
+    for left,right,back,front,columns,rows in grilles:
+        mid,center=(left+right)*.5,(back+front)*.5
+        width,depth=right-left,front-back
+        loop=_outline([(-.5,-.39),(-.464,-.5),(.453,-.5),(.5,-.385),
+                       (.5,.404),(.452,.5),(-.443,.5),(-.5,.397)],2)
+        panel=[(u*width,v*depth) for u,v in loop]
+        openings.append(_offset_outline(panel,(mid,center)))
+        def vent(u,v,d):
+            return _add(cowl(mid+u,center+v),(0,d,0))
+
+        _bezel(name,"plain","Recessed frame around open cowl grille",panel,vent,
+               [(1,0),(.957,-.002),(.936,-.006),(.936,-.012)],rgb(0x232825))
+        _bezel(name,"plain","Dark plenum under cowl grille",panel,vent,
+               [(.946,-.012),(.922,-.016)],rgb(0x161a19),True)
+        for i in range(1,columns):
+            u=blend(-.466,.466,i/columns)*width
+            _cord(name,"gloss","Thin molded grille cross vane",
+                  [vent(u,-.46*depth,-.003),vent(u,.46*depth,-.002)],
+                  .00105,rgb(0x535750),sides=5)
+        for i in range(1,rows):
+            v=blend(-.45,.45,i/rows)*depth
+            _cord(name,"gloss","Longitudinal grille web",
+                  [vent(u,v,-.0016) for u in (blend(-.47,.47,t)*width for t in _range(15))],
+                  .00117,rgb(0x484e48),sides=5)
+    _perforated_surface(name,"plain","Sculpted cowl cover with two asymmetric intakes",
+                        [(0,0),(1,0),(1,1),(0,1)],openings,
+                        [(u,v) for u in _range(45) for v in _range(13)],
+                        cowl,rgb(0x292d2a),flip=True)
+
+    def apron(u,v):
+        x,y,z=cowl(u,1)
+        return x,y-.088*smooth(0,1,v),z+.124*v
+    _panel(name,"plain","Rolled cowl front return into the engine bay",42,9,apron,
+           rgb(0x272b28),True)
+    _cord(name,"gloss","Folded bead across the leading cowl edge",
+          [apron(u,.93) for u in _range(43)],.0031,rgb(0x424843),sides=7)
     for start,end,pivot in ((.462,.861,.870),(.107,.489,.509)):
         glass_x=_end_glass_point(True,pivot,1)[0]
         at=_add(cowl(.50+glass_x/1.526,.48),(0,-.002,0))
@@ -1230,6 +1281,8 @@ def _cowl_wipers():
               [(0,.014,.014),(.007,.014,.014),(.011,.010,.010)],rgb(0x252928),26,at)
         lathe(name,"gloss","Pressed wiper spindle cap",
               [(0,.010,.010),(.005,.009,.009)],rgb(0x363b37),20,_add(at,(0,.010,0)))
+        lathe(name,"gloss","Recessed wiper spindle nut",
+              [(0,.0065,.0065),(.004,.006,.006)],rgb(0x666c65),6,_add(at,(0,.014,0)))
         def blade(t,h=0):
             u=blend(start,end,t)
             v=.988-.027*sin(pi*t*.91)-.006*t

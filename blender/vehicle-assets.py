@@ -48,9 +48,16 @@ def _finish(slot,paint=None,optic=None,override=None):
     elif override=="Mirror lettering":
         principled.inputs["Roughness"].default_value=.68
         principled.inputs["Metallic"].default_value=.02
-    elif override=="Cast aluminum":
-        principled.inputs["Roughness"].default_value=.47
-        principled.inputs["Metallic"].default_value=.58
+    elif override=="Painted bay steel":
+        principled.inputs["Roughness"].default_value=.33
+        principled.inputs["Metallic"].default_value=.08
+        principled.inputs["Specular IOR Level"].default_value=.25
+        principled.inputs["Coat Weight"].default_value=.21
+        principled.inputs["Coat Roughness"].default_value=.23
+    elif override in ("Cast aluminum","Pressed heat shield"):
+        shield=override=="Pressed heat shield"
+        principled.inputs["Roughness"].default_value=.53 if shield else .47
+        principled.inputs["Metallic"].default_value=.69 if shield else .58
         texture=nodes.new("ShaderNodeTexNoise")
         coords=nodes.new("ShaderNodeTexCoord")
         texture.inputs["Scale"].default_value=610
@@ -61,6 +68,40 @@ def _finish(slot,paint=None,optic=None,override=None):
         grain.inputs["Distance"].default_value=.00021
         links.new(texture.outputs["Fac"],grain.inputs["Height"])
         links.new(grain.outputs["Normal"],principled.inputs["Normal"])
+        if shield:
+            oxidation=nodes.new("ShaderNodeTexNoise")
+            oxidation.inputs["Scale"].default_value=61
+            oxidation.inputs["Detail"].default_value=4
+            links.new(coords.outputs["Object"],oxidation.inputs["Vector"])
+            ramp=nodes.new("ShaderNodeValToRGB")
+            ramp.color_ramp.elements[0].position=.31
+            ramp.color_ramp.elements[0].color=(.43,.35,.28,1)
+            ramp.color_ramp.elements[1].position=.62
+            ramp.color_ramp.elements[1].color=(.98,.96,.91,1)
+            links.new(oxidation.outputs["Fac"],ramp.inputs[0])
+            residue=nodes.new("ShaderNodeMixRGB")
+            residue.blend_type="MULTIPLY"
+            residue.inputs[0].default_value=.60
+            links.new(attribute.outputs["Color"],residue.inputs[1])
+            links.new(ramp.outputs["Color"],residue.inputs[2])
+            links.new(residue.outputs[0],principled.inputs["Base Color"])
+    elif override=="Flecked luggage carpet":
+        coord=nodes.new("ShaderNodeTexCoord")
+        fibers=nodes.new("ShaderNodeTexVoronoi")
+        fibers.inputs["Scale"].default_value=355
+        links.new(coord.outputs["Object"],fibers.inputs["Vector"])
+        flecks=nodes.new("ShaderNodeValToRGB")
+        flecks.color_ramp.elements[0].position=.22
+        flecks.color_ramp.elements[0].color=(1.21,1.24,1.28,1)
+        flecks.color_ramp.elements[1].position=.60
+        flecks.color_ramp.elements[1].color=(.22,.22,.22,1)
+        links.new(fibers.outputs["Distance"],flecks.inputs[0])
+        color=nodes.new("ShaderNodeMixRGB")
+        color.blend_type="MULTIPLY"
+        color.inputs[0].default_value=.76
+        links.new(attribute.outputs["Color"],color.inputs[1])
+        links.new(flecks.outputs["Color"],color.inputs[2])
+        links.new(color.outputs[0],principled.inputs["Base Color"])
     elif override=="Matte meter face":
         principled.inputs["Roughness"].default_value=.70
         principled.inputs["Specular IOR Level"].default_value=.14
